@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 
+import 'core/database/hive_service.dart';
 import 'features/scanner/presentation/scanner_screen.dart';
 
-void main() {
+void main() async {
+  // Bắt buộc gọi dòng này khi hàm main() có dùng async/await (để khởi tạo các hàm Native của đt)
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Khởi tạo Database Offline (Hive) ngay từ lúc vừa bật App
+  await HiveService.init();
+
   runApp(const MyApp());
 }
 
