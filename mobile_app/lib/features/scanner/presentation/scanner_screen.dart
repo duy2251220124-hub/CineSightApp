@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../../core/database/hive_service.dart';
+
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
 
@@ -14,43 +16,44 @@ class _ScannerScreenState extends State<ScannerScreen> {
   bool isProcessing = false;
 
   void _handleBarcode(BarcodeCapture capture) async {
-    // Đang xử lý vé cũ thì bỏ qua các khung hình camera tiếp theo
     if (isProcessing) return;
 
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isNotEmpty) {
       final String code = barcodes.first.rawValue ?? '';
 
-      // Kiểm tra chống quét trùng lặp
       if (code.isNotEmpty && code != lastScannedCode) {
         setState(() {
           isProcessing = true;
           lastScannedCode = code;
         });
 
-        // Gọi hàm xử lý và show UI (tạm thời mock dữ liệu)
+        // --- TÍCH HỢP HIVE DATABASE TẠI ĐÂY ---
+        // Lưu ngay lập tức mã vé vừa quét vào ổ cứng điện thoại (Lưu Offline)
+        await HiveService.saveScannedTicket(code);
+
         _showResultDialog(code);
       }
     }
   }
 
   void _showResultDialog(String ticketCode) {
-    // TODO: Chỗ này sau này sẽ gọi API hoặc Check Local Database (Hive)
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
           title: const Text(
-            'Kết quả soát vé',
+            'Soát vé thành công',
             style: TextStyle(color: Colors.green),
           ),
-          content: Text('Mã vé: $ticketCode\n\nTrạng thái: HỢP LỆ (Mô phỏng)'),
+          content: Text(
+            'Mã vé: $ticketCode\n\nTrạng thái: ĐÃ LƯU OFFLINE VÀO MÁY (Tập A).',
+          ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                // Đợi 2 giây mới cho quét mã khác để tránh spam màn hình
                 Future.delayed(const Duration(seconds: 2), () {
                   if (mounted) {
                     setState(() {
@@ -74,17 +77,29 @@ class _ScannerScreenState extends State<ScannerScreen> {
         title: const Text('Soát vé rạp phim'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_note),
-            tooltip: 'Nhập mã bằng tay',
+            icon: const Icon(Icons.sync, color: Colors.greenAccent),
+            tooltip: 'Kiểm tra vé đang lưu',
             onPressed: () {
-              // TODO: Chuyển sang màn hình form nhập tay khi QR rách
+              // Test thử tính năng lấy toàn bộ vé đang lưu Offline trong máy
+              final list = HiveService.getAllScannedTickets();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Đang có ${list.length} vé trong máy chờ đồng bộ lên AI!',
+                  ),
+                ),
+              );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_note),
+            tooltip: 'Nhập tay',
+            onPressed: () {},
           ),
         ],
       ),
       body: Stack(
         children: [
-          // Giao diện Camera full màn hình
           MobileScanner(
             onDetect: _handleBarcode,
             overlayBuilder: (context, constraints) {
@@ -101,7 +116,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
               );
             },
           ),
-          // Hiển thị vòng xoay loading khi đang gọi API kiểm tra vé
           if (isProcessing)
             Container(
               color: Colors.black45,
@@ -115,8 +129,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 }
 
-// Class phụ trợ: Vẽ một cái khung vuông ở giữa màn hình (Viewfinder)
-// Giúp user biết phải đưa mã QR vào vị trí nào
+// Class phụ trợ: Vẽ khung vuông ở giữa màn hình (Viewfinder)
 class QrScannerOverlayShape extends ShapeBorder {
   final Color borderColor;
   final double borderWidth;
@@ -170,7 +183,6 @@ class QrScannerOverlayShape extends ShapeBorder {
       ..color = borderColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = borderWidth;
-
     canvas.drawPath(
       Path.combine(
         PathOperation.difference,
@@ -181,7 +193,6 @@ class QrScannerOverlayShape extends ShapeBorder {
       ),
       backgroundPaint,
     );
-
     final path = Path();
     final double left = cutOutRect.left,
         right = cutOutRect.right,
