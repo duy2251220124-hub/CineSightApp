@@ -1,0 +1,14 @@
+# Cấu hình Dataset cho mô hình YOLO Head Detection (Camera Hồng ngoại)
+
+# Đường dẫn gốc tới thư mục chứa dữ liệu
+path: ./datasets 
+train: images/train  # Ảnh dùng để huấn luyện
+val: images/val      # Ảnh dùng để kiểm thử (đánh giá độ chính xác)
+
+# Số lượng class (Chỉ có 1 mục tiêu duy nhất là cái đầu của khán giả)
+nc: 1
+
+# Tên của các class tương ứng với ID (ID 0)
+names:
+  0: head
+

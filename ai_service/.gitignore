@@ -1,0 +1,13 @@
+# Môi trường ảo Python
+venv/
+env/
+__pycache__/
+
+# Dữ liệu ảnh và mô hình AI (Không đẩy lên Github vì quá nặng)
+datasets/images/
+datasets/labels/
+runs/
+*.pt
+
+# Biến môi trường
+.env
