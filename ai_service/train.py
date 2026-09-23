@@ -4,7 +4,7 @@ def main():
     print("[INFO] Bắt đầu khởi tạo huấn luyện mô hình YOLOv8s...")
     
     # Load mô hình YOLOv8 small pre-trained (cân bằng tốt giữa tốc độ và độ chính xác)
-    model = YOLO('yolov8s.pt')
+    model = YOLO('yolov8n.pt')
     
     # Bắt đầu quá trình Fine-tune (Huấn luyện lại) trên dữ liệu đầu người ảnh hồng ngoại
     results = model.train(

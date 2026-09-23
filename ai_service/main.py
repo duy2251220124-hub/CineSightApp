@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+﻿from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from ultralytics import YOLO
 import cv2
@@ -6,71 +6,76 @@ import numpy as np
 import json
 from seat_mapper import load_seats_config, process_ai_detections, generate_alerts
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(
     title="CineSight AI Vision API",
-    description="API kiểm đếm khán giả rạp chiếu phim bằng thị giác máy tính. Hỗ trợ nhiều phòng chiếu.",
+    description="API kiá»ƒm Ä‘áº¿m khÃ¡n giáº£ ráº¡p chiáº¿u phim báº±ng thá»‹ giÃ¡c mÃ¡y tÃ­nh. Há»— trá»£ nhiá»u phÃ²ng chiáº¿u.",
     version="2.0.0"
 )
 
-print("[INFO] Đang tải mô hình YOLO...")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['http://localhost:3000', 'http://127.0.0.1:3000'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+
+print("[INFO] Äang táº£i mÃ´ hÃ¬nh YOLO...")
 try:
     model = YOLO('yolov8n.pt')
-    print("[OK] Tải model thành công!")
+    print("[OK] Táº£i model thÃ nh cÃ´ng!")
 except Exception as e:
-    print(f"[ERROR] Không tải được model: {e}")
+    print(f"[ERROR] KhÃ´ng táº£i Ä‘Æ°á»£c model: {e}")
     model = None
 
-# ======================================================================
-# CƠ SỞ DỮ LIỆU TẠM THỜI (Trong thực tế sẽ dùng MySQL/MongoDB/Firebase)
-# Dùng để lưu trữ danh sách vé (Tập A) do App Mobile đẩy lên
-# ======================================================================
-active_tickets_db = {}
+
+from database import save_tickets, get_tickets
 
 @app.get("/")
 def health_check():
-    return {"status": "CineSight AI Service đang chạy", "version": "2.0.0"}
+    return {"status": "CineSight AI Service Ä‘ang cháº¡y", "version": "2.0.0"}
 
-# ----------------------------------------------------------------------
-# ENDPOINT 1: DÀNH RIÊNG CHO APP MOBILE (Nhận Tập A)
-# ----------------------------------------------------------------------
+
 @app.post("/api/v1/sync_tickets")
 def sync_tickets_from_app(
-    room_id: str = Form(..., description="Mã phòng chiếu. VD: room1"),
-    scanned_tickets: str = Form(..., description="Danh sách vé từ Hive DB. VD: [\"A1\", \"B2\"]")
+    room_id: str = Form(..., description="MÃ£ phÃ²ng chiáº¿u. VD: room1"),
+    scanned_tickets: str = Form(..., description="Danh sÃ¡ch vÃ© tá»« Hive DB. VD: [\"A1\", \"B2\"]")
 ):
     try:
         tap_A = set(json.loads(scanned_tickets))
-        active_tickets_db[room_id] = tap_A
-        print(f"[SYNC] Đã nhận {len(tap_A)} vé của phòng {room_id} từ App Mobile.")
-        return {"status": "success", "message": f"Đã đồng bộ {len(tap_A)} vé cho phòng {room_id}"}
+        save_tickets(room_id, tap_A)
+        print(f"[SYNC] ÄÃ£ nháº­n {len(tap_A)} vÃ© cá»§a phÃ²ng {room_id} tá»« App Mobile.")
+        return {"status": "success", "message": f"ÄÃ£ Ä‘á»“ng bá»™ {len(tap_A)} vÃ© cho phÃ²ng {room_id}"}
     except json.JSONDecodeError:
-        return JSONResponse(status_code=400, content={"error": "scanned_tickets phải là JSON array."})
+        return JSONResponse(status_code=400, content={"error": "scanned_tickets pháº£i lÃ  JSON array."})
 
 # ----------------------------------------------------------------------
-# ENDPOINT 2: DÀNH RIÊNG CHO CAMERA RẠP PHIM (Nhận Ảnh -> Tạo Tập B)
+# ENDPOINT 2: DÃ€NH RIÃŠNG CHO CAMERA Ráº P PHIM (Nháº­n áº¢nh -> Táº¡o Táº­p B)
 # ----------------------------------------------------------------------
 @app.post("/api/v1/analyze")
 async def analyze_cinema_room(
-    image: UploadFile = File(..., description="Ảnh chụp từ camera CCTV phòng chiếu"),
-    room_id: str = Form(..., description="Mã phòng chiếu. VD: room1")
+    image: UploadFile = File(..., description="áº¢nh chá»¥p tá»« camera CCTV phÃ²ng chiáº¿u"),
+    room_id: str = Form(..., description="MÃ£ phÃ²ng chiáº¿u. VD: room1")
 ):
-    # Lấy Tập A đã được App đồng bộ từ trước. Nếu chưa có thì coi như rỗng.
-    tap_A = active_tickets_db.get(room_id, set())
+    # Láº¥y Táº­p A Ä‘Ã£ Ä‘Æ°á»£c App Ä‘á»“ng bá»™ tá»« trÆ°á»›c. Náº¿u chÆ°a cÃ³ thÃ¬ coi nhÆ° rá»—ng.
+    tap_A = get_tickets(room_id)
 
-    # Đọc bản đồ ghế
+    # Äá»c báº£n Ä‘á»“ gháº¿
     seats_config = load_seats_config(room_id)
     if not seats_config:
         return JSONResponse(
             status_code=404,
-            content={"error": f"Chưa có bản đồ ghế cho phòng '{room_id}'."}
+            content={"error": f"ChÆ°a cÃ³ báº£n Ä‘á»“ gháº¿ cho phÃ²ng '{room_id}'."}
         )
 
-    # Đọc ảnh camera gửi lên
+    # Äá»c áº£nh camera gá»­i lÃªn
     contents = await image.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    # Chạy AI
+    # Cháº¡y AI
     detected_heads = []
     if model:
         results = model.predict(img, conf=0.4, classes=[0], verbose=False)
@@ -79,10 +84,10 @@ async def analyze_cinema_room(
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 detected_heads.append(((x1 + x2) / 2, (y1 + y2) / 2))
 
-    # Ánh xạ Tập B
+    # Ãnh xáº¡ Táº­p B
     tap_B = process_ai_detections(detected_heads, seats_config)
 
-    # Đối chiếu
+    # Äá»‘i chiáº¿u
     alert_result = generate_alerts(tap_A, tap_B, room_id)
 
     return {
@@ -96,3 +101,5 @@ async def analyze_cinema_room(
         },
         "alerts": alert_result
     }
+
+

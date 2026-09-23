@@ -12,3 +12,11 @@ runs/
 # Biến môi trường
 .env
 
+
+# Temporary files and db
+cinesight.db
+ram_log_*.txt
+*.jpg
+ram_test.ps1
+test_db.py
+
