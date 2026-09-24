@@ -10,13 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="CineSight AI Vision API",
-    description="API kiá»ƒm Ä‘áº¿m khÃ¡n giáº£ ráº¡p chiáº¿u phim báº±ng thá»‹ giÃ¡c mÃ¡y tÃ­nh. Há»— trá»£ nhiá»u phÃ²ng chiáº¿u.",
+    description="CCais dell ma",
     version="2.0.0"
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://localhost:3000', 'http://127.0.0.1:3000'],
+    allow_origins=['*'], # Cấu hình tạm thời cho giai đoạn demo,
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
@@ -101,5 +101,6 @@ async def analyze_cinema_room(
         },
         "alerts": alert_result
     }
+
 
 

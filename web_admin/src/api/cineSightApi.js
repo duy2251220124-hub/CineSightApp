@@ -1,7 +1,7 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
-// Khi deploy thực tế, đổi thành IP máy chủ AI
-const API_BASE = 'http://127.0.0.1:8000';
+// Khi deploy thá»±c táº¿, Ä‘á»•i thÃ nh IP mÃ¡y chá»§ AI
+const API_BASE = 'https://quill-device-deny.ngrok-free.dev';
 
 const api = axios.create({ baseURL: API_BASE });
 
@@ -17,4 +17,6 @@ export const healthCheck = async () => {
   const res = await api.get('/');
   return res.data;
 };
+
+
 
