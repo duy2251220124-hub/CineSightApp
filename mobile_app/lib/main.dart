@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'core/database/hive_service.dart';
-import 'features/scanner/presentation/scanner_screen.dart';
+import 'core/theme/app_theme.dart';
+import 'features/auth/presentation/login_screen.dart';
 
 void main() async {
-  // Bắt buộc gọi dòng này khi hàm main() có dùng async/await (để khởi tạo các hàm Native của đt)
+  // Bắt buộc gọi dòng này khi hàm main() có dùng async/await
   WidgetsFlutterBinding.ensureInitialized();
 
   // Khởi tạo Database Offline (Hive) ngay từ lúc vừa bật App
@@ -19,16 +20,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CineSight Scanner',
-      theme: ThemeData(
-        // Rạp phim nên xài giao diện nền tối (Dark mode) cho chuyên nghiệp và đỡ chói mắt
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.red,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      home: const ScannerScreen(),
+      title: 'CineSight',
+      debugShowCheckedModeBanner: false,
+      // Dùng theme tập trung từ AppTheme — KHÔNG định nghĩa màu trực tiếp ở đây
+      theme: AppTheme.dark,
+      // TODO: nối dữ liệu thật sau — thay bằng go_router khi có auth logic
+      // Hiện tại: bắt đầu từ LoginScreen để đúng luồng Figma
+      home: const LoginScreen(),
     );
   }
 }

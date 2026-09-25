@@ -3,3 +3,8 @@
 ngrok.yml
 ngrok.zip
 ngrok_bin/
+
+# AI Data & Models
+*.db
+*.pt
+*.engine
