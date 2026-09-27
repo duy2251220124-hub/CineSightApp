@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'core/database/hive_service.dart';
 import 'core/theme/app_theme.dart';
-import 'features/auth/presentation/login_screen.dart';
+import 'screens/cs_login_screen.dart';
+import 'features/home/presentation/home_screen.dart';
 
 void main() async {
   // Bắt buộc gọi dòng này khi hàm main() có dùng async/await
@@ -26,7 +27,16 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.dark,
       // TODO: nối dữ liệu thật sau — thay bằng go_router khi có auth logic
       // Hiện tại: bắt đầu từ LoginScreen để đúng luồng Figma
-      home: const LoginScreen(),
+      home: Builder(
+        builder: (ctx) => CSLoginScreen(
+          onLogin: () {
+            Navigator.pushReplacement(
+              ctx,
+              MaterialPageRoute(builder: (_) => const HomeShell()),
+            );
+          },
+        ),
+      ),
     );
   }
 }
