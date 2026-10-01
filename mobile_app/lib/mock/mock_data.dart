@@ -11,6 +11,8 @@ class CSMockMovie {
   final String time;
 
   final String room;
+  final String roomId;
+  final String date;
 
   final String status;
 
@@ -27,6 +29,8 @@ class CSMockMovie {
     required this.time,
 
     required this.room,
+    required this.roomId,
+    required this.date,
 
     required this.status,
 
@@ -261,56 +265,37 @@ abstract final class CSMockData {
 
 
   static const movies = <CSMockMovie>[
-
     CSMockMovie(
-
       title: 'Kung Fu Panda 4',
-
       time: '19:30 - 21:20',
-
       room: 'Phòng 05',
-
+      roomId: 'room1',
+      date: '2026-09-29',
       status: 'Đã phân công: 1/2',
-
       sold: 96,
-
       capacity: 120,
-
     ),
-
     CSMockMovie(
-
       title: 'Dune: Part Two',
-
       time: '20:00 - 22:45',
-
       room: 'Phòng 01',
-
+      roomId: 'room2',
+      date: '2026-09-29',
       status: 'Đã phân công: 1/1',
-
       sold: 110,
-
       capacity: 120,
-
     ),
-
     CSMockMovie(
-
       title: 'Godzilla x Kong',
-
       time: '21:00 - 23:05',
-
       room: 'Phòng 03',
-
+      roomId: 'room3',
+      date: '2026-09-29',
       status: 'Chưa phân công: 0/1',
-
       sold: 84,
-
       capacity: 120,
-
     ),
-
-  ];
+];
 
 
 

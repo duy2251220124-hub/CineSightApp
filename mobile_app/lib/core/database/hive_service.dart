@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class HiveService {
@@ -19,7 +20,7 @@ class HiveService {
     // Thuật toán chống lưu trùng lặp: Nếu trong máy chưa có vé này thì mới lưu
     if (!box.values.contains(ticketCode)) {
       await box.add(ticketCode);
-      print('[HIVE] Đã lưu vé $ticketCode vào bộ nhớ Offline thành công!');
+      debugPrint('[HIVE] Đã lưu vé $ticketCode vào bộ nhớ Offline thành công!');
     }
   }
 
@@ -30,9 +31,15 @@ class HiveService {
   }
 
   /// Xóa toàn bộ vé trong máy SAU KHI đã đồng bộ lên mạng thành công
-  static Future<void> clearTicketsAfterSync() async {
+    static Future<void> clearTicketsAfterSync(List<String> syncedTickets) async {
     final box = Hive.box<String>(_ticketBoxName);
-    await box.clear();
-    print('[HIVE] Đã dọn dẹp bộ nhớ Offline sau khi đồng bộ!');
+    final keysToDelete = [];
+    for (var key in box.keys) {
+      if (syncedTickets.contains(box.get(key))) {
+        keysToDelete.add(key);
+      }
+    }
+    await box.deleteAll(keysToDelete);
+    debugPrint('[HIVE] Đã dọn dẹp ${keysToDelete.length} vé khỏi bộ nhớ Offline sau khi đồng bộ!');
   }
 }

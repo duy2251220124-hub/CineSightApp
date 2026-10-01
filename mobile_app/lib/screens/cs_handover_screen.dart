@@ -1,21 +1,13 @@
 
 
 import 'package:flutter/material.dart';
-
 import '../mock/mock_data.dart';
-
 import '../theme/app_theme.dart';
-
 import '../widgets/cs_app_card.dart';
-
-import '../widgets/cs_bottom_nav.dart';
-
 import '../widgets/cs_screen_header.dart';
-
 import '../widgets/cs_status_tag.dart';
-
-
-
+import 'cs_incident_detail_screen.dart';
+import 'cs_add_incident_screen.dart';
 class CSHandoverScreen extends StatelessWidget {
 
   final ValueChanged<int>? onNavigationChanged;
@@ -56,17 +48,11 @@ class CSHandoverScreen extends StatelessWidget {
 
     return Scaffold(
 
-      bottomNavigationBar: CSBottomNav(
-
-        selectedIndex: 0,
-
-        onChanged: onNavigationChanged,
-
-      ),
+      
 
       floatingActionButton: FloatingActionButton(
 
-        onPressed: onAddIncident,
+        onPressed: onAddIncident ?? () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CSAddIncidentScreen())),
 
         child: const Icon(Icons.add),
 
@@ -116,7 +102,7 @@ class CSHandoverScreen extends StatelessWidget {
 
                   incident: incident,
 
-                  onTap: () => onIncidentSelected?.call(incident),
+                  onTap: () => onIncidentSelected != null ? onIncidentSelected!(incident) : showDialog(context: context, builder: (_) => AlertDialog(contentPadding: EdgeInsets.zero, backgroundColor: Colors.transparent, content: CSIncidentDetailScreen(incident: incident))),
 
                 ),
 

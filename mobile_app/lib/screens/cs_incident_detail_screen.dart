@@ -1,299 +1,166 @@
-
-
 import 'package:flutter/material.dart';
-
 import '../mock/mock_data.dart';
-
 import '../theme/app_theme.dart';
-
-import '../widgets/cs_app_card.dart';
-
-import '../widgets/cs_primary_button.dart';
-
-import '../widgets/cs_screen_header.dart';
-
 import '../widgets/cs_status_tag.dart';
 
-
-
 class CSIncidentDetailScreen extends StatelessWidget {
-
   final CSMockIncident? incident;
-
   final VoidCallback? onResolved;
-
   final VoidCallback? onBack;
 
-
-
   const CSIncidentDetailScreen({
-
     super.key,
-
     this.incident,
-
     this.onResolved,
-
     this.onBack,
-
   });
 
-
-
   @override
-
   Widget build(BuildContext context) {
-    final incident = this.incident ?? CSMockData.incidents.first;
-
-    return Scaffold(
-
-      body: SafeArea(
-
-        child: Column(
-
-          children: [
-
-            CSScreenHeader(
-
-              title: 'Sự cố & Bàn giao',
-
-              subtitle: 'Quản lý sự cố kỹ thuật của rạp',
-
-              onBack: onBack,
-
-            ),
-
-            Expanded(
-
-              child: ListView(
-
-                padding: const EdgeInsets.all(10),
-
-                children: [
-
-                  Row(
-
-                    children: [
-
-                      Expanded(
-
-                        child: Text(
-
-                          incident.title,
-
-                          style: const TextStyle(
-
-                            fontSize: 17,
-
-                            fontWeight: FontWeight.w700,
-
-                          ),
-
-                        ),
-
-                      ),
-
-                      CSStatusTag(
-
-                        text: incident.resolved
-
-                            ? 'Đã xử lý'
-
-                            : 'Chờ xử lý',
-
-                        color: incident.resolved
-
-                            ? CSAppColors.success
-
-                            : CSAppColors.warning,
-
-                      ),
-
-                    ],
-
-                  ),
-
-                  const SizedBox(height: 7),
-
-                  Text(
-
-                    'Rạp chiếu: ${incident.room} • '
-
-                    'Vị trí: ${incident.position}',
-
-                    style: const TextStyle(
-
-                      color: CSAppColors.muted,
-
-                      fontSize: 11,
-
-                    ),
-
-                  ),
-
-                  const SizedBox(height: 120),
-
-                  CSAppCard(
-
-                    color: CSAppColors.background,
-
-                    child: Column(
-
-                      crossAxisAlignment: CrossAxisAlignment.start,
-
-                      children: [
-
-                        CSIncidentInfoRow(
-
-                          label: 'Báo cáo bởi',
-
-                          value: incident.reporter,
-
-                        ),
-
-                        const Divider(),
-
-                        CSIncidentInfoRow(
-
-                          label: 'Thời gian',
-
-                          value: incident.time,
-
-                        ),
-
-                        const Divider(),
-
-                        const Text(
-
-                          'Mô tả chi tiết',
-
-                          style: TextStyle(color: CSAppColors.muted),
-
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        Text(incident.description),
-
-                      ],
-
-                    ),
-
-                  ),
-
-                ],
-
-              ),
-
-            ),
-
-            Padding(
-
-              padding: const EdgeInsets.all(10),
-
-              child: Column(
-
-                children: [
-
-                  CSPrimaryButton(
-
-                    label: 'Đã xử lý',
-
-                    color: CSAppColors.success,
-
-                    onPressed: onResolved,
-
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  SizedBox(
-
-                    width: double.infinity,
-
-                    child: OutlinedButton(
-
-                      onPressed: onBack,
-
-                      child: const Text('Quay lại danh sách'),
-
-                    ),
-
-                  ),
-
-                ],
-
-              ),
-
-            ),
-
-          ],
-
-        ),
-
+    final data = incident ?? CSMockData.incidents.first;
+    final color = data.resolved ? CSAppColors.success : CSAppColors.warning;
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.66,
+      decoration: const BoxDecoration(
+        color: CSAppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Grab handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
 
+            // Header
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        data.title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Rạp chiếu: ${data.room} • Vị trí: ${data.position}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: CSAppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                CSStatusTag(
+                  text: data.resolved ? 'Đã khắc phục' : 'Chờ xử lý',
+                  color: color,
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Detail Block
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: CSAppColors.surfaceStrong,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDetailRow('Báo cáo bởi', data.reporter),
+                  const Divider(color: Colors.white10, height: 24),
+                  _buildDetailRow('Thời gian', data.time),
+                  const Divider(color: Colors.white10, height: 24),
+                  const Text('Mô tả chi tiết', style: TextStyle(color: CSAppColors.muted, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  Text(
+                    data.description,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Buttons
+            if (!data.resolved) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (onResolved != null) onResolved!();
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981), // Green color matching Figma
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text('Đã xử lý', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  if (onBack != null) onBack!();
+                  Navigator.pop(context);
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white24),
+                  backgroundColor: CSAppColors.surfaceStrong,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Quay lại danh sách', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
-
   }
 
-}
-
-
-
-class CSIncidentInfoRow extends StatelessWidget {
-
-  final String label;
-
-  final String value;
-
-
-
-  const CSIncidentInfoRow({
-
-    super.key,
-
-    required this.label,
-
-    required this.value,
-
-  });
-
-
-
-  @override
-
-  Widget build(BuildContext context) {
-
+  Widget _buildDetailRow(String label, String value) {
     return Row(
-
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-
-        Expanded(
-
-          child: Text(
-
-            label,
-
-            style: const TextStyle(color: CSAppColors.muted),
-
-          ),
-
-        ),
-
-        Text(
-
-          value,
-
-          style: const TextStyle(fontWeight: FontWeight.w700),
-
-        ),
-
+        Text(label, style: const TextStyle(color: CSAppColors.muted, fontSize: 13)),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
       ],
-
     );
-
   }
-
 }
-

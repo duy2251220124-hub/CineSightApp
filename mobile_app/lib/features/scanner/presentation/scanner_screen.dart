@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/database/hive_service.dart';
+import '../../../core/network/api_client.dart';
 import '../../../theme/app_theme.dart';
 import '../../../mock/mock_data.dart';
 import '../../../widgets/cs_app_card.dart';
@@ -9,7 +11,14 @@ import '../../../widgets/cs_scan_result_view.dart';
 import '../../../screens/cs_scan_history_screen.dart';
 
 class ScannerScreen extends StatefulWidget {
-  const ScannerScreen({super.key});
+  final String roomId;
+  final String showId;
+
+  const ScannerScreen({
+    super.key,
+    this.roomId = 'room1',
+    this.showId = '',
+  });
 
   @override
   State<ScannerScreen> createState() => _ScannerScreenState();
@@ -18,7 +27,6 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen> {
   final MobileScannerController _controller = MobileScannerController();
 
-  // Biến dùng để debounce (chống quét liên tục cùng 1 mã)
   String? lastScannedCode;
   bool isProcessing = false;
 
@@ -32,64 +40,130 @@ class _ScannerScreenState extends State<ScannerScreen> {
     if (isProcessing) return;
 
     final List<Barcode> barcodes = capture.barcodes;
-    if (barcodes.isNotEmpty) {
-      final String code = barcodes.first.rawValue ?? '';
+    for (final barcode in barcodes) {
+      final code = barcode.rawValue;
+      if (code != null) {
+        setState(() => isProcessing = true);
 
-      if (code.isNotEmpty && code != lastScannedCode) {
-        setState(() {
-          isProcessing = true;
-          lastScannedCode = code;
-        });
+        try {
+          final Map<String, dynamic> data = jsonDecode(code);
 
-        // --- TÍCH HỢP HIVE DATABASE TẠI ĐÂY ---
-        // Lưu ngay lập tức mã vé vừa quét vào ổ cứng điện thoại (Lưu Offline)
-        await HiveService.saveScannedTicket(code);
+          if (data['ticket'] == null ||
+              data['room'] == null ||
+              data['seat'] == null ||
+              data['show'] == null) {
+            _showError('Mã không hợp lệ');
+            return;
+          }
 
-        _showResultBottomSheet(code);
+          if (data['room'] != widget.roomId) {
+            _showError('Sai phòng (QR: ${data["room"]}, đang soát: ${widget.roomId})');
+            return;
+          }
+
+          if (widget.showId.isNotEmpty && data['show'] != widget.showId) {
+            _showError('Sai suất (QR: ${data["show"]}, đang soát: ${widget.showId})');
+            return;
+          }
+
+          final rawTickets = HiveService.getAllScannedTickets();
+          final String ticketId = data['ticket'];
+          final alreadyScanned = rawTickets.any((raw) {
+            try {
+              return jsonDecode(raw)['ticket'] == ticketId;
+            } catch (_) {
+              return false;
+            }
+          });
+
+          if (alreadyScanned) {
+            _showResultBottomSheet(
+              ticketId,
+              seat: data['seat'] ?? '',
+              type: CSScanResultType.used,
+              title: 'VÉ ĐÃ QUÉT',
+            );
+            return;
+          }
+
+          await HiveService.saveScannedTicket(code);
+
+          ApiClient.syncTicketsToServer(widget.roomId, widget.showId).then((success) {
+            if (success) {
+              debugPrint("Đã bắn vé $ticketId lên server!");
+            }
+          });
+
+          _showResultBottomSheet(
+            ticketId,
+            seat: data['seat'] ?? '',
+            type: CSScanResultType.success,
+            title: 'QUÉT THÀNH CÔNG',
+          );
+        } catch (e) {
+          _showError('Mã không hợp lệ');
+        }
       }
     }
   }
 
-  void _showResultBottomSheet(String ticketCode) {
-    // Gọi UI hiển thị kết quả từ Figma dưới dạng BottomSheet
+  void _showError(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Lỗi', style: TextStyle(color: Colors.red)),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Future.delayed(const Duration(seconds: 2), () {
+                  if (mounted) setState(() => isProcessing = false);
+                });
+              },
+              child: const Text('Tiếp tục quét'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showResultBottomSheet(
+    String ticketCode, {
+    String seat = '',
+    CSScanResultType type = CSScanResultType.success,
+    String title = 'Soát vé thành công',
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      isDismissible: false,
-      enableDrag: false,
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+        return CSScanResultView(
+          result: CSMockScanResult(
+            type: type,
+            title: title,
+            seat: seat,
+            quantity: '1 Vé',
+            customer: 'Khách lẻ',
+            ticketCode: ticketCode,
+            usedAt: '19:30',
+            previousGate: '',
+            scanned: 11,
+            total: 120,
           ),
-          child: CSScanResultView(
-            // Tạm thời hiển thị Mock Data nhưng gài mã vé thật vừa quét vào
-            result: CSMockScanResult(
-              type: CSScanResultType.success,
-              title: 'QUÉT THÀNH CÔNG',
-              seat: 'F12',
-              quantity: '1 khách',
-              customer: 'Khách hàng',
-              ticketCode: ticketCode, // MÃ VÉ THẬT LẤY TỪ CAMERA
-              usedAt: '',
-              previousGate: '',
-              scanned: 14,
-              total: 120,
-            ),
-            movie: CSMockData.movies.first,
-            onScanNext: () {
-              Navigator.pop(context); // Đóng popup
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (mounted) {
-                  setState(() => isProcessing = false);
-                }
-              });
-            },
-          ),
+          movie: CSMockData.movies.firstWhere((m) => m.roomId == widget.roomId, orElse: () => CSMockData.movies.first),
+          onScanNext: () => Navigator.pop(context),
         );
       },
-    );
+    ).then((_) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => isProcessing = false);
+      });
+    });
   }
 
   void _toggleFlash() {
@@ -99,169 +173,94 @@ class _ScannerScreenState extends State<ScannerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // Nền đen cho UI camera quét
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // 1. Camera View thực tế
-            MobileScanner(controller: _controller, onDetect: _handleBarcode),
-
-            // 2. Lớp phủ đen và khoét lỗ khung vuông (Viewfinder)
-            Container(
-              decoration: ShapeDecoration(
-                shape: QrScannerOverlayShape(
-                  borderColor: CSAppColors.primary,
-                  borderRadius: 20,
-                  borderLength: 40,
-                  borderWidth: 3,
-                  cutOutSize: 290,
-                ),
-              ),
-            ),
-
-            // 3. Các nút điều hướng Top Bar
-            Positioned(
-              top: 4,
-              left: 8,
-              child: IconButton(
-                onPressed: () => Navigator.maybePop(context),
-                icon: const Icon(Icons.chevron_left, color: Colors.white),
-              ),
-            ),
-            Positioned(
-              top: 4,
-              right: 8,
-              child: IconButton(
-                onPressed: _toggleFlash,
-                icon: const Icon(
-                  Icons.flashlight_on_outlined,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-
-            // 4. Loading Indicator khi đang xử lý
-            if (isProcessing)
-              Container(
-                color: Colors.black45,
-                child: const Center(
-                  child: CircularProgressIndicator(color: CSAppColors.primary),
-                ),
-              ),
-
-            // 5. Bảng Thống kê & Nút chức năng ở dưới đáy (Figma Layout)
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 18,
-              child: CSAppCard(
-                child: Column(
-                  children: [
-                    const Text(
-                      'Đưa mã QR vào khung hình',
-                      style: TextStyle(color: CSAppColors.muted),
-                    ),
-                    const SizedBox(height: 12),
-                    const Row(
-                      children: [
-                        Expanded(
-                          child: CSScanStat(
-                            value: '13',
-                            label: 'Đã soát',
-                            color: CSAppColors.success,
-                          ),
-                        ),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: CSScanStat(
-                            value: '120',
-                            label: 'Tổng vé',
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _toggleFlash,
-                            icon: const Icon(Icons.flashlight_on_outlined),
-                            label: const Text('Bật đèn'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              // Chuyển sang màn hình Lịch sử quét (Nhóm C)
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (ctx) => CSScanHistoryScreen(
-                                    
-                                  )
-                                )
-                              );
-                            },
-                            icon: const Icon(Icons.search),
-                            label: const Text('Tra cứu'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// --- CLASS PHỤ TRỢ: VẼ KHUNG QUÉT ---
-class CSScanStat extends StatelessWidget {
-  final String value;
-  final String label;
-  final Color color;
-
-  const CSScanStat({
-    super.key,
-    required this.value,
-    required this.label,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: CSAppColors.surfaceStrong,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
+      backgroundColor: Colors.black,
+      body: Stack(
         children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+          MobileScanner(
+            controller: _controller,
+            onDetect: _handleBarcode,
+          ),
+          _ScannerOverlay(),
+          Positioned(
+            top: 40,
+            left: 10,
+            right: 10,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.flash_on, color: Colors.white),
+                  onPressed: _toggleFlash,
+                ),
+              ],
             ),
           ),
-          Text(
-            label,
-            style: const TextStyle(color: CSAppColors.muted, fontSize: 10),
+          if (isProcessing)
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+              decoration: const BoxDecoration(
+                color: CSAppColors.background,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Đưa mã QR vào khung hình',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  CSAppCard(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _StatItem(
+                          value: '13',
+                          label: 'Đã soát',
+                          color: CSAppColors.primary,
+                        ),
+                        Container(width: 1, height: 30, color: Colors.white24),
+                        const _StatItem(
+                          value: '120',
+                          label: 'Tổng vé',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const CSScanHistoryScreen(),
+                          ),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white24),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Lịch sử quét'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -269,95 +268,107 @@ class CSScanStat extends StatelessWidget {
   }
 }
 
-class QrScannerOverlayShape extends ShapeBorder {
-  final Color borderColor;
-  final double borderWidth;
-  final double overlayColor;
-  final double borderRadius;
-  final double borderLength;
-  final double cutOutSize;
-
-  const QrScannerOverlayShape({
-    this.borderColor = Colors.red,
-    this.borderWidth = 3.0,
-    this.overlayColor = 150,
-    this.borderRadius = 0,
-    this.borderLength = 40,
-    this.cutOutSize = 250,
-  });
-
+class _ScannerOverlay extends StatelessWidget {
   @override
-  EdgeInsetsGeometry get dimensions => const EdgeInsets.all(10.0);
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double width = constraints.maxWidth;
+        final double scanArea = width * 0.7;
 
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
-    return Path()
-      ..fillType = PathFillType.evenOdd
-      ..addPath(getOuterPath(rect), Offset.zero);
+        return Stack(
+          children: [
+            Container(
+              decoration: ShapeDecoration(
+                shape: _ScannerHoleShape(
+                  holeSize: Size(scanArea, scanArea),
+                ),
+              ),
+            ),
+            Center(
+              child: Container(
+                width: scanArea,
+                height: scanArea,
+                decoration: BoxDecoration(
+                  border: Border.all(color: CSAppColors.primary, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
+}
+
+class _ScannerHoleShape extends ShapeBorder {
+  final Size holeSize;
+
+  const _ScannerHoleShape({required this.holeSize});
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path();
 
   @override
   Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
-    Path path = Path()..addRect(rect);
-    rect = Rect.fromCenter(
+    final holeRect = Rect.fromCenter(
       center: rect.center,
-      width: cutOutSize,
-      height: cutOutSize,
+      width: holeSize.width,
+      height: holeSize.height,
     );
-    path.addRRect(RRect.fromRectAndRadius(rect, Radius.circular(borderRadius)));
-    return path;
+    return Path()
+      ..addRect(rect)
+      ..addRRect(RRect.fromRectAndRadius(holeRect, const Radius.circular(12)))
+      ..fillType = PathFillType.evenOdd;
   }
 
   @override
   void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    final backgroundPaint = Paint()
-      ..color = Colors.black.withAlpha(overlayColor.toInt())
+    final paint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.5)
       ..style = PaintingStyle.fill;
-    final cutOutRect = Rect.fromCenter(
-      center: rect.center,
-      width: cutOutSize,
-      height: cutOutSize,
-    );
-    final borderPaint = Paint()
-      ..color = borderColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = borderWidth;
-    canvas.drawPath(
-      Path.combine(
-        PathOperation.difference,
-        Path()..addRect(rect),
-        Path()..addRRect(
-          RRect.fromRectAndRadius(cutOutRect, Radius.circular(borderRadius)),
-        ),
-      ),
-      backgroundPaint,
-    );
-    final path = Path();
-    final double left = cutOutRect.left,
-        right = cutOutRect.right,
-        top = cutOutRect.top,
-        bottom = cutOutRect.bottom;
-    path.moveTo(left, top + borderLength);
-    path.lineTo(left, top);
-    path.lineTo(left + borderLength, top);
-    path.moveTo(right - borderLength, top);
-    path.lineTo(right, top);
-    path.lineTo(right, top + borderLength);
-    path.moveTo(right, bottom - borderLength);
-    path.lineTo(right, bottom);
-    path.lineTo(right - borderLength, bottom);
-    path.moveTo(left + borderLength, bottom);
-    path.lineTo(left, bottom);
-    path.lineTo(left, bottom - borderLength);
-    canvas.drawPath(path, borderPaint);
+    canvas.drawPath(getOuterPath(rect), paint);
   }
 
   @override
-  ShapeBorder scale(double t) {
-    return QrScannerOverlayShape(
-      borderColor: borderColor,
-      borderWidth: borderWidth,
-      overlayColor: overlayColor,
+  ShapeBorder scale(double t) => this;
+}
+
+class _StatItem extends StatelessWidget {
+  final String value;
+  final String label;
+  final Color? color;
+
+  const _StatItem({
+    required this.value,
+    required this.label,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color ?? Colors.white,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: CSAppColors.muted,
+          ),
+        ),
+      ],
     );
   }
 }

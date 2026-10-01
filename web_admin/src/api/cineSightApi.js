@@ -1,13 +1,14 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 
 // Khi deploy thá»±c táº¿, Ä‘á»•i thÃ nh IP mÃ¡y chá»§ AI
 const API_BASE = 'https://quill-device-deny.ngrok-free.dev';
 
 const api = axios.create({ baseURL: API_BASE });
 
-export const analyzeRoom = async (roomId, imageFile) => {
+export const analyzeRoom = async (roomId, showId, imageFile) => {
   const formData = new FormData();
   formData.append('room_id', roomId);
+  formData.append('show_id', showId);
   formData.append('image', imageFile);
   const res = await api.post('/api/v1/analyze', formData);
   return res.data;

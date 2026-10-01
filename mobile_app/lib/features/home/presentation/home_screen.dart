@@ -14,9 +14,11 @@ import '../../../screens/cs_settings_screen.dart';
 import '../../../screens/cs_seat_map_screen.dart';
 import '../../../screens/cs_damaged_seat_screen.dart';
 import '../../../screens/cs_add_incident_screen.dart';
-import '../../../screens/cs_incident_detail_screen.dart';
+
 import '../../../screens/cs_offline_screen.dart';
 import '../../../screens/cs_login_screen.dart';
+import '../../../mock/mock_data.dart';
+import '../../../core/utils/show_id_utils.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -28,130 +30,141 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
 
+  CSMockMovie _selectedMovie = CSMockData.movies.first;
+
+  String get _currentShowId =>
+      toShowId(_selectedMovie.date, _selectedMovie.time);
+
+  final List<GlobalKey<NavigatorState>> _navigatorKeys = [
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+  ];
+
+  Future<bool> _systemBackButtonPressed() async {
+    final navigator = _navigatorKeys[_currentIndex].currentState;
+    if (navigator != null && navigator.canPop()) {
+      navigator.pop();
+      return false; 
+    }
+    if (_currentIndex != 0) {
+      setState(() { _currentIndex = 0; });
+      return false;
+    }
+    return true; 
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: CSAppColors.background,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          // TAB 1: Trang chủ
-          CSHomeScreen(
-            onShowtimes: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (ctx) => CSShowtimesScreen(
-                    onMovieSelected: (_) => Navigator.pop(ctx),
-                  ),
-                ),
-              );
-            },
-            onRooms: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (ctx) => CSRoomsScreen(
-                    onConfirmed: (room) {
-                      // MỞ SƠ ĐỒ GHẾ NGỒI (Nhóm C)
-                      Navigator.push(
-                        ctx,
-                        MaterialPageRoute(
-                          builder: (ctx2) => CSSeatMapScreen(
-                            onReportDamagedSeat: () {
-                              // MỞ BÁO CÁO GHẾ HỎNG (Nhóm C)
-                              Navigator.push(
-                                ctx2,
-                                MaterialPageRoute(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) { if (!didPop) _systemBackButtonPressed(); },
+      child: Scaffold(
+        backgroundColor: CSAppColors.background,
+        body: IndexedStack(
+          index: _currentIndex,
+          children: [
+            // TAB 0
+            Navigator(
+              key: _navigatorKeys[0],
+              onGenerateRoute: (settings) => MaterialPageRoute(
+                builder: (navCtx) => CSHomeScreen(
+                  onShowtimes: () {
+                    Navigator.push(navCtx, MaterialPageRoute(
+                      builder: (ctx) => CSShowtimesScreen(
+                        onMovieSelected: (movie) {
+                          setState(() => _selectedMovie = movie);
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                    ));
+                  },
+                  onRooms: () {
+                    Navigator.push(navCtx, MaterialPageRoute(
+                      builder: (ctx) => CSRoomsScreen(
+                        onConfirmed: (room) {
+                          Navigator.push(ctx, MaterialPageRoute(
+                            builder: (ctx2) => CSSeatMapScreen(
+                              onReportDamagedSeat: () {
+                                Navigator.push(ctx2, MaterialPageRoute(
                                   builder: (ctx3) => CSDamagedSeatScreen(
                                     onAddPhoto: () {
-                                      // MỞ TẠO SỰ CỐ MỚI (Nhóm C)
-                                      Navigator.push(
-                                        ctx3,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const CSAddIncidentScreen(),
-                                        ),
-                                      );
+                                      Navigator.push(ctx3, MaterialPageRoute(
+                                        builder: (_) => const CSAddIncidentScreen(),
+                                      ));
                                     },
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              );
-            },
-            onHandover: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CSHandoverScreen()),
-              );
-            },
-            onNotifications: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CSNotificationScreen()),
-              );
-            },
-          ),
+                                ));
+                              },
+                            ),
+                          ));
+                        },
+                      ),
+                    ));
+                  },
+                  onHandover: () {
+                    Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSHandoverScreen()));
+                  },
+                  onNotifications: () {
+                    Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSNotificationScreen()));
+                  },
+                )
+              )
+            ),
+            
+            // TAB 1
+            Navigator(
+              key: _navigatorKeys[1],
+              onGenerateRoute: (settings) => MaterialPageRoute(
+                builder: (navCtx) => ScannerScreen(roomId: _selectedMovie.roomId, showId: _currentShowId)
+              )
+            ),
 
-          // TAB 2: Quét vé
-          const ScannerScreen(),
+            // TAB 2
+            Navigator(
+              key: _navigatorKeys[2],
+              onGenerateRoute: (settings) => MaterialPageRoute(
+                builder: (navCtx) => CSWarningScreen(
+                  onWarningSelected: (warning) {
+                    Navigator.push(navCtx, MaterialPageRoute(
+                      builder: (ctx) => CSWarningDetailScreen(
+                        onResolved: () => Navigator.pop(ctx),
+                      ),
+                    ));
+                  },
+                  onIgnoreAll: () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã bỏ qua tất cả')));
+                  },
+                )
+              )
+            ),
 
-          // TAB 3: Cảnh báo
-          CSWarningScreen(
-            onWarningSelected: (warning) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (ctx) => CSWarningDetailScreen(
-                    onResolved: () => Navigator.pop(ctx),
-                  ),
-                ),
-              );
-            },
-            onIgnoreAll: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Đã bỏ qua tất cả')));
-            },
-          ),
-
-          // TAB 4: Cài đặt (Đã thay bằng Giao diện thật từ Figma - Nhóm C)
-          CSSettingsScreen(
-            onNotifications: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CSNotificationScreen()),
-              );
-            },
-            onChangePassword: () {
-              // TEST ROUTE: Mở giao diện Offline (Nhóm C)
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (ctx) =>
-                      CSOfflineScreen(onRetry: () => Navigator.pop(ctx)),
-                ),
-              );
-            },
-            onLogout: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const CSLoginScreen()),
-              );
-            },
-          ),
-        ],
-      ),
-      bottomNavigationBar: CSBottomNav(
-        selectedIndex: _currentIndex,
-        onChanged: (i) => setState(() => _currentIndex = i),
+            // TAB 3
+            Navigator(
+              key: _navigatorKeys[3],
+              onGenerateRoute: (settings) => MaterialPageRoute(
+                builder: (navCtx) => CSSettingsScreen(
+                  onNotifications: () {
+                    Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSNotificationScreen()));
+                  },
+                  onChangePassword: () {
+                    Navigator.push(navCtx, MaterialPageRoute(
+                      builder: (ctx) => CSOfflineScreen(onRetry: () => Navigator.pop(ctx)),
+                    ));
+                  },
+                  onLogout: () {
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CSLoginScreen()));
+                  },
+                )
+              )
+            ),
+          ],
+        ),
+        bottomNavigationBar: CSBottomNav(
+          selectedIndex: _currentIndex,
+          onChanged: (i) => setState(() => _currentIndex = i),
+        ),
       ),
     );
   }

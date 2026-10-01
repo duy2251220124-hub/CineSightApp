@@ -1,4 +1,4 @@
-﻿import sqlite3
+import sqlite3
 import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "cinesight.db")
@@ -9,29 +9,30 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tickets (
             room_id TEXT,
+            show_id TEXT,
             ticket_id TEXT,
-            PRIMARY KEY (room_id, ticket_id)
+            seat_id TEXT,
+            PRIMARY KEY (room_id, show_id, ticket_id)
         )
     ''')
     conn.commit()
     conn.close()
 
-def save_tickets(room_id: str, tickets: set):
+def save_tickets(room_id: str, show_id: str, tickets: list):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM tickets WHERE room_id = ?", (room_id,))
     if tickets:
         cursor.executemany(
-            "INSERT INTO tickets (room_id, ticket_id) VALUES (?, ?)",
-            [(room_id, t) for t in tickets]
+            "INSERT OR IGNORE INTO tickets (room_id, show_id, ticket_id, seat_id) VALUES (?, ?, ?, ?)",
+            [(room_id, show_id, t['ticket'], t['seat']) for t in tickets]
         )
     conn.commit()
     conn.close()
 
-def get_tickets(room_id: str) -> set:
+def get_seats(room_id: str, show_id: str) -> set:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT ticket_id FROM tickets WHERE room_id = ?", (room_id,))
+    cursor.execute("SELECT seat_id FROM tickets WHERE room_id = ? AND show_id = ?", (room_id, show_id))
     rows = cursor.fetchall()
     conn.close()
     return {row[0] for row in rows}

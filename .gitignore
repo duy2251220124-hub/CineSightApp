@@ -8,3 +8,4 @@ ngrok_bin/
 *.db
 *.pt
 *.engine
+tools/qr_samples/

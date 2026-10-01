@@ -72,9 +72,13 @@ class CSScanResultView extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
-    return Scaffold(
-
-      body: SafeArea(
+        return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: CSAppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
 
         child: Column(
 
@@ -86,11 +90,7 @@ class CSScanResultView extends StatelessWidget {
 
               padding: const EdgeInsets.symmetric(vertical: 22),
 
-              decoration: BoxDecoration(
-
-                border: Border.all(color: _color),
-
-              ),
+              decoration: BoxDecoration(border: Border.all(color: _color), borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
 
               child: Column(
 
