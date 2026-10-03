@@ -1,14 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
-
 import 'dart:convert';
-
 import '../database/hive_service.dart';
 
 class ApiClient {
   // Lưu ý: Nếu chạy máy ảo Android, dùng 'http://10.0.2.2:8000'
-  // Nếu cắm điện thoại thật, dùng IP của máy tính (VD: 'http://192.168.1.15:8000')
-  static const String baseUrl = 'https://quill-device-deny.ngrok-free.dev';
+  // Nếu cắm điện thoại thật chung WiFi, dùng 'http://192.168.111.248:8000'
+  static const String baseUrl = 'http://192.168.111.248:8000';
 
   static final Dio _dio = Dio(
     BaseOptions(
