@@ -45,6 +45,7 @@ class CSScanResultView extends StatelessWidget {
       CSScanResultType.wait => CSAppColors.warning,
 
       CSScanResultType.used => CSAppColors.danger,
+      CSScanResultType.invalid => CSAppColors.danger,
 
     };
 
@@ -61,6 +62,7 @@ class CSScanResultView extends StatelessWidget {
       CSScanResultType.wait => Icons.priority_high,
 
       CSScanResultType.used => Icons.error_outline,
+      CSScanResultType.invalid => Icons.error_outline,
 
     };
 

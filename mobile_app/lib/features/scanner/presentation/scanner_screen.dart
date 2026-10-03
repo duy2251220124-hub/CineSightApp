@@ -154,29 +154,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
-  void _showError(String message) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Lỗi', style: TextStyle(color: Colors.red)),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Future.delayed(const Duration(seconds: 2), () {
-                  if (mounted) setState(() => isProcessing = false);
-                });
-              },
-              child: const Text('Tiếp tục quét'),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  
 
   void _showResultBottomSheet(
     String ticketCode, {
