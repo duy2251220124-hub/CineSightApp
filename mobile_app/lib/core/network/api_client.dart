@@ -9,13 +9,16 @@ class ApiClient {
   // BƯỚC QUAN TRỌNG:
   // Copy link Forwarding (HTTPS) từ màn hình chạy Ngrok và dán vào đây
   // Ví dụ: 'https://xxxx-xxxx.ngrok-free.app'
-  static const String baseUrl = ' http://127.0.0.1:4040';
+  static const String baseUrl = 'https://quill-device-deny.ngrok-free.dev';
 
   static final Dio _dio = Dio(
     BaseOptions(
-      baseUrl: baseUrl,
+      baseUrl: baseUrl.trim(),
       connectTimeout: const Duration(seconds: 5),
       receiveTimeout: const Duration(seconds: 3),
+      headers: {
+        'ngrok-skip-browser-warning': 'true', // Bypass ngrok free warning
+      },
     ),
   );
 
