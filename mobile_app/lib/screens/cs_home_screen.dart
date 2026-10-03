@@ -7,7 +7,8 @@ import '../widgets/cs_movie_card.dart';
 import '../widgets/cs_status_tag.dart';
 
 class CSHomeScreen extends StatelessWidget {
-  final VoidCallback? onNotifications;
+  /// Nhận context của icon chuông để popup thông báo canh đúng vị trí.
+  final ValueChanged<BuildContext>? onNotifications;
   final VoidCallback? onShowtimes;
   final VoidCallback? onRooms;
   final VoidCallback? onHandover;
@@ -47,9 +48,13 @@ class CSHomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: onNotifications,
-                  icon: const Icon(Icons.notifications_none),
+                Builder(
+                  builder: (bellContext) => IconButton(
+                    onPressed: onNotifications == null
+                        ? null
+                        : () => onNotifications!(bellContext),
+                    icon: const Icon(Icons.notifications_none),
+                  ),
                 ),
               ],
             ),

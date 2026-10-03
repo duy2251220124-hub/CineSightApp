@@ -284,59 +284,71 @@ class CSScanResultView extends StatelessWidget {
 
                   CSAppCard(
 
-                    child: result.type == CSScanResultType.success
+                    child: Column(
 
-                        ? Column(
+                      children: [
 
-                            children: [
+                        CSScanInfoRow(
 
-                              CSScanInfoRow(
+                          label: 'Mã vé',
 
-                                label: 'Khách hàng',
+                          value: result.ticketCode,
 
-                                value: result.customer,
+                        ),
 
-                              ),
+                        if (result.type == CSScanResultType.success) ...[
 
-                              const SizedBox(height: 10),
+                          if (result.customer.isNotEmpty) ...[
 
-                              CSScanInfoRow(
+                            const SizedBox(height: 10),
 
-                                label: 'Mã vé',
+                            CSScanInfoRow(
 
-                                value: result.ticketCode,
+                              label: 'Khách hàng',
 
-                              ),
+                              value: result.customer,
 
-                            ],
+                            ),
 
-                          )
+                          ],
 
-                        : Column(
+                          const SizedBox(height: 10),
 
-                            children: [
+                          CSScanInfoRow(
 
-                              CSScanInfoRow(
+                            label: 'Thời gian quét',
 
-                                label: 'Vé đã sử dụng lúc',
-
-                                value: result.usedAt,
-
-                              ),
-
-                              const SizedBox(height: 10),
-
-                              CSScanInfoRow(
-
-                                label: 'Địa điểm quét trước',
-
-                                value: result.previousGate,
-
-                              ),
-
-                            ],
+                            value: result.usedAt,
 
                           ),
+
+                        ] else ...[
+
+                          const SizedBox(height: 10),
+
+                          CSScanInfoRow(
+
+                            label: 'Vé đã sử dụng lúc',
+
+                            value: result.usedAt,
+
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          CSScanInfoRow(
+
+                            label: 'Địa điểm quét trước',
+
+                            value: result.previousGate,
+
+                          ),
+
+                        ],
+
+                      ],
+
+                    ),
 
                   ),
 
@@ -482,15 +494,21 @@ class CSScanInfoRow extends StatelessWidget {
 
         ),
 
-        Text(
+        Flexible(
 
-          value,
+          child: Text(
 
-          style: const TextStyle(
+            value,
 
-            color: CSAppColors.primary,
+            textAlign: TextAlign.end,
 
-            fontWeight: FontWeight.w700,
+            style: const TextStyle(
+
+              color: CSAppColors.primary,
+
+              fontWeight: FontWeight.w700,
+
+            ),
 
           ),
 

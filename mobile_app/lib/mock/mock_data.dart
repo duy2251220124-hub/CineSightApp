@@ -1,6 +1,6 @@
+﻿
 
-
-enum CSScanResultType { success, wait, used }
+enum CSScanResultType { success, wait, used, invalid }
 
 
 
@@ -250,17 +250,17 @@ abstract final class CSMockData {
 
   static const employeeId = 'US-221033';
 
-  static const employeeRole = 'Nhân viên vận hành';
+  static const employeeRole = 'NhÃ¢n viÃªn váº­n hÃ nh';
 
   static const cinemaName = 'CGV Vinh Trung Plaza';
 
   static const shiftTime = '10:00 - 18:00';
 
-  static const activeRooms = '5/5 phòng';
+  static const activeRooms = '5/5 phÃ²ng';
 
   static const selectedDate = '25/04';
 
-  static const selectedDateLabel = 'Hôm nay, 25 Tháng 4';
+  static const selectedDateLabel = 'HÃ´m nay, 25 ThÃ¡ng 4';
 
 
 
@@ -268,30 +268,30 @@ abstract final class CSMockData {
     CSMockMovie(
       title: 'Kung Fu Panda 4',
       time: '19:30 - 21:20',
-      room: 'Phòng 05',
+      room: 'PhÃ²ng 05',
       roomId: 'room1',
       date: '2026-09-29',
-      status: 'Đã phân công: 1/2',
+      status: 'ÄÃ£ phÃ¢n cÃ´ng: 1/2',
       sold: 96,
       capacity: 120,
     ),
     CSMockMovie(
       title: 'Dune: Part Two',
       time: '20:00 - 22:45',
-      room: 'Phòng 01',
+      room: 'PhÃ²ng 01',
       roomId: 'room2',
       date: '2026-09-29',
-      status: 'Đã phân công: 1/1',
+      status: 'ÄÃ£ phÃ¢n cÃ´ng: 1/1',
       sold: 110,
       capacity: 120,
     ),
     CSMockMovie(
       title: 'Godzilla x Kong',
       time: '21:00 - 23:05',
-      room: 'Phòng 03',
+      room: 'PhÃ²ng 03',
       roomId: 'room3',
       date: '2026-09-29',
-      status: 'Chưa phân công: 0/1',
+      status: 'ChÆ°a phÃ¢n cÃ´ng: 0/1',
       sold: 84,
       capacity: 120,
     ),
@@ -303,61 +303,61 @@ abstract final class CSMockData {
 
     CSMockRoom(
 
-      name: 'Rạp 1',
+      name: 'Ráº¡p 1',
 
       movie: 'Kung Fu Panda 4',
 
       time: '19:30 - 21:20',
 
-      status: 'Đang chiếu',
+      status: 'Äang chiáº¿u',
 
     ),
 
     CSMockRoom(
 
-      name: 'Rạp 2',
+      name: 'Ráº¡p 2',
 
       movie: 'Kung Fu Panda 4',
 
       time: '19:30 - 21:20',
 
-      status: 'Đang chiếu',
+      status: 'Äang chiáº¿u',
 
     ),
 
     CSMockRoom(
 
-      name: 'Rạp 3',
+      name: 'Ráº¡p 3',
 
       movie: 'Kung Fu Panda 4',
 
       time: '19:30 - 21:20',
 
-      status: 'Đang chiếu',
+      status: 'Äang chiáº¿u',
 
     ),
 
     CSMockRoom(
 
-      name: 'Rạp 4',
+      name: 'Ráº¡p 4',
 
       movie: 'Kung Fu Panda 4',
 
       time: '19:30 - 21:20',
 
-      status: 'Đang chiếu',
+      status: 'Äang chiáº¿u',
 
     ),
 
     CSMockRoom(
 
-      name: 'Rạp 5',
+      name: 'Ráº¡p 5',
 
       movie: 'Kung Fu Panda 4',
 
       time: '19:30 - 21:20',
 
-      status: 'Đang chiếu',
+      status: 'Äang chiáº¿u',
 
     ),
 
@@ -369,19 +369,9 @@ abstract final class CSMockData {
 
     CSMockWarning(
 
-      title: 'Ghế có người nhưng không có vé',
+      title: 'Gháº¿ cÃ³ ngÆ°á»i nhÆ°ng khÃ´ng cÃ³ vÃ©',
 
-      detail: 'Rạp 5: A10, A11 | Hàng B: B12',
-
-      severity: 2,
-
-    ),
-
-    CSMockWarning(
-
-      title: 'Ghế có người nhưng không có vé',
-
-      detail: 'Rạp 3: A10, A11 | Hàng B: B12',
+      detail: 'Ráº¡p 5: A10, A11 | HÃ ng B: B12',
 
       severity: 2,
 
@@ -389,9 +379,19 @@ abstract final class CSMockData {
 
     CSMockWarning(
 
-      title: 'Ghế có vé nhưng trống người',
+      title: 'Gháº¿ cÃ³ ngÆ°á»i nhÆ°ng khÃ´ng cÃ³ vÃ©',
 
-      detail: 'Hàng C: C08, C09',
+      detail: 'Ráº¡p 3: A10, A11 | HÃ ng B: B12',
+
+      severity: 2,
+
+    ),
+
+    CSMockWarning(
+
+      title: 'Gháº¿ cÃ³ vÃ© nhÆ°ng trá»‘ng ngÆ°á»i',
+
+      detail: 'HÃ ng C: C08, C09',
 
       severity: 1,
 
@@ -399,9 +399,9 @@ abstract final class CSMockData {
 
     CSMockWarning(
 
-      title: 'Vượt quá sức chứa',
+      title: 'VÆ°á»£t quÃ¡ sá»©c chá»©a',
 
-      detail: 'Số lượng người trong phòng vượt quá số vé soát',
+      detail: 'Sá»‘ lÆ°á»£ng ngÆ°á»i trong phÃ²ng vÆ°á»£t quÃ¡ sá»‘ vÃ© soÃ¡t',
 
       severity: 0,
 
@@ -421,7 +421,7 @@ abstract final class CSMockData {
 
       scanTime: '19:15',
 
-      employee: 'Bạn',
+      employee: 'Báº¡n',
 
       valid: true,
 
@@ -435,7 +435,7 @@ abstract final class CSMockData {
 
       scanTime: '19:15',
 
-      employee: 'Bạn',
+      employee: 'Báº¡n',
 
       valid: false,
 
@@ -449,7 +449,7 @@ abstract final class CSMockData {
 
       scanTime: '19:16',
 
-      employee: 'Bạn',
+      employee: 'Báº¡n',
 
       valid: true,
 
@@ -463,7 +463,7 @@ abstract final class CSMockData {
 
       scanTime: '19:17',
 
-      employee: 'Bạn',
+      employee: 'Báº¡n',
 
       valid: true,
 
@@ -477,17 +477,17 @@ abstract final class CSMockData {
 
     CSMockIncident(
 
-      title: 'Ghế C4 - Rách đệm ghế',
+      title: 'Gháº¿ C4 - RÃ¡ch Ä‘á»‡m gháº¿',
 
-      reporter: 'NV_Tuan (Ca trước)',
+      reporter: 'NV_Tuan (Ca trÆ°á»›c)',
 
       description:
 
-          'Đệm mút rách lộ phần khung sắt bên trong, có thể gây mất an toàn hoặc rách quần áo của khách hàng khi ngồi.',
+          'Äá»‡m mÃºt rÃ¡ch lá»™ pháº§n khung sáº¯t bÃªn trong, cÃ³ thá»ƒ gÃ¢y máº¥t an toÃ n hoáº·c rÃ¡ch quáº§n Ã¡o cá»§a khÃ¡ch hÃ ng khi ngá»“i.',
 
-      room: 'Rạp 3',
+      room: 'Ráº¡p 3',
 
-      position: 'Hàng C - Ghế 04',
+      position: 'HÃ ng C - Gháº¿ 04',
 
       time: '14:00 - 24/09/2026',
 
@@ -497,19 +497,19 @@ abstract final class CSMockData {
 
     CSMockIncident(
 
-      title: 'Bậc thềm F - Cháy đèn LED',
+      title: 'Báº­c thá»m F - ChÃ¡y Ä‘Ã¨n LED',
 
-      reporter: 'Bạn (15 phút trước)',
+      reporter: 'Báº¡n (15 phÃºt trÆ°á»›c)',
 
       description:
 
-          'Đèn LED chỉ dẫn lối đi hàng F bị mất nguồn hoàn toàn.',
+          'ÄÃ¨n LED chá»‰ dáº«n lá»‘i Ä‘i hÃ ng F bá»‹ máº¥t nguá»“n hoÃ n toÃ n.',
 
-      room: 'Rạp 3',
+      room: 'Ráº¡p 3',
 
-      position: 'Bậc thềm F',
+      position: 'Báº­c thá»m F',
 
-      time: '15 phút trước',
+      time: '15 phÃºt trÆ°á»›c',
 
       resolved: false,
 
@@ -517,17 +517,17 @@ abstract final class CSMockData {
 
     CSMockIncident(
 
-      title: 'Máy lạnh rỉ nước góc tường',
+      title: 'MÃ¡y láº¡nh rá»‰ nÆ°á»›c gÃ³c tÆ°á»ng',
 
-      reporter: 'Kỹ thuật',
+      reporter: 'Ká»¹ thuáº­t',
 
       description:
 
-          'Đã thông đường ống thoát nước máy lạnh góc phía Tây.',
+          'ÄÃ£ thÃ´ng Ä‘Æ°á»ng á»‘ng thoÃ¡t nÆ°á»›c mÃ¡y láº¡nh gÃ³c phÃ­a TÃ¢y.',
 
-      room: 'Rạp 3',
+      room: 'Ráº¡p 3',
 
-      position: 'Góc phía Tây',
+      position: 'GÃ³c phÃ­a TÃ¢y',
 
       time: '14:30',
 
@@ -543,33 +543,33 @@ abstract final class CSMockData {
 
     CSMockNotification(
 
-      title: 'Sự cố mới phát sinh - Rạp 3',
+      title: 'Sá»± cá»‘ má»›i phÃ¡t sinh - Ráº¡p 3',
 
       detail:
 
-          'Ghế C4 rách đệm bọc da, cần kỹ thuật xử lý gấp trước ca tối.',
+          'Gháº¿ C4 rÃ¡ch Ä‘á»‡m bá»c da, cáº§n ká»¹ thuáº­t xá»­ lÃ½ gáº¥p trÆ°á»›c ca tá»‘i.',
 
-      time: '15 phút trước',
-
-    ),
-
-    CSMockNotification(
-
-      title: 'Đổi ca bàn giao ca làm',
-
-      detail: 'NV_Tuan đã gửi báo cáo bàn giao ca chiều.',
-
-      time: '1 giờ trước',
+      time: '15 phÃºt trÆ°á»›c',
 
     ),
 
     CSMockNotification(
 
-      title: 'Bắt đầu suất chiếu: Dune 2',
+      title: 'Äá»•i ca bÃ n giao ca lÃ m',
 
-      detail: 'Suất chiếu phòng 1 đã bắt đầu lúc 20:00.',
+      detail: 'NV_Tuan Ä‘Ã£ gá»­i bÃ¡o cÃ¡o bÃ n giao ca chiá»u.',
 
-      time: '2 giờ trước',
+      time: '1 giá» trÆ°á»›c',
+
+    ),
+
+    CSMockNotification(
+
+      title: 'Báº¯t Ä‘áº§u suáº¥t chiáº¿u: Dune 2',
+
+      detail: 'Suáº¥t chiáº¿u phÃ²ng 1 Ä‘Ã£ báº¯t Ä‘áº§u lÃºc 20:00.',
+
+      time: '2 giá» trÆ°á»›c',
 
     ),
 
@@ -581,13 +581,13 @@ abstract final class CSMockData {
 
     type: CSScanResultType.success,
 
-    title: 'QUÉT THÀNH CÔNG',
+    title: 'QUÃ‰T THÃ€NH CÃ”NG',
 
     seat: 'F12',
 
-    quantity: '1 khách',
+    quantity: '1 khÃ¡ch',
 
-    customer: 'Nguyễn Văn A',
+    customer: 'Nguyá»…n VÄƒn A',
 
     ticketCode: '#4823',
 
@@ -607,11 +607,11 @@ abstract final class CSMockData {
 
     type: CSScanResultType.wait,
 
-    title: 'VUI LÒNG CHỜ',
+    title: 'VUI LÃ’NG CHá»œ',
 
     seat: 'F12',
 
-    quantity: '1 khách',
+    quantity: '1 khÃ¡ch',
 
     customer: '',
 
@@ -619,7 +619,7 @@ abstract final class CSMockData {
 
     usedAt: '19:13 - 24/04/2026',
 
-    previousGate: 'Tại Cổng 2',
+    previousGate: 'Táº¡i Cá»•ng 2',
 
     scanned: 28,
 
@@ -633,11 +633,11 @@ abstract final class CSMockData {
 
     type: CSScanResultType.used,
 
-    title: 'VÉ ĐÃ QUÉT',
+    title: 'VÃ‰ ÄÃƒ QUÃ‰T',
 
     seat: 'F12',
 
-    quantity: '1 khách',
+    quantity: '1 khÃ¡ch',
 
     customer: '',
 
@@ -645,7 +645,7 @@ abstract final class CSMockData {
 
     usedAt: '19:13 - 24/04/2026',
 
-    previousGate: 'Tại Cổng 2',
+    previousGate: 'Táº¡i Cá»•ng 2',
 
     scanned: 28,
 
@@ -677,9 +677,8 @@ abstract final class CSMockData {
 
   static const warningSeats = <String>['D3', 'D4'];
 
-  static const selectedBrokenSeats = <String>['F5', 'H1'];
-
 }
+
 
 
 

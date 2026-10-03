@@ -102,7 +102,16 @@ class CSHandoverScreen extends StatelessWidget {
 
                   incident: incident,
 
-                  onTap: () => onIncidentSelected != null ? onIncidentSelected!(incident) : showDialog(context: context, builder: (_) => AlertDialog(contentPadding: EdgeInsets.zero, backgroundColor: Colors.transparent, content: CSIncidentDetailScreen(incident: incident))),
+                  onTap: () => onIncidentSelected != null
+                      ? onIncidentSelected!(incident)
+                      : showModalBottomSheet<void>(
+                          context: context,
+                          useRootNavigator: true,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          barrierColor: Colors.black54,
+                          builder: (_) => CSIncidentDetailScreen(incident: incident),
+                        ),
 
                 ),
 

@@ -26,10 +26,10 @@ class CSIncidentDetailScreen extends StatelessWidget {
         color: CSAppColors.background,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
       child: SafeArea(
+        top: false,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Grab handle
@@ -43,8 +43,13 @@ class CSIncidentDetailScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
             // Header
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,7 +109,11 @@ class CSIncidentDetailScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
 
             // Buttons
             if (!data.resolved) ...[

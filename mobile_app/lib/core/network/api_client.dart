@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+
 import 'dart:convert';
+
 import '../database/hive_service.dart';
 
 class ApiClient {
-  // Lưu ý: Nếu chạy máy ảo Android, dùng 'http://10.0.2.2:8000'
-  // Nếu cắm điện thoại thật chung WiFi, dùng 'http://192.168.111.248:8000'
-  static const String baseUrl = 'http://192.168.111.248:8000';
+  // BƯỚC QUAN TRỌNG:
+  // Copy link Forwarding (HTTPS) từ màn hình chạy Ngrok và dán vào đây
+  // Ví dụ: 'https://xxxx-xxxx.ngrok-free.app'
+  static const String baseUrl = ' http://127.0.0.1:4040';
 
   static final Dio _dio = Dio(
     BaseOptions(

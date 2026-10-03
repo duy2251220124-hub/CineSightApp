@@ -55,6 +55,15 @@ class _HomeShellState extends State<HomeShell> {
     return true; 
   }
 
+  /// Bấm tab khác -> chuyển tab. Bấm lại tab đang mở -> quay về màn gốc của tab.
+  void _onTabTapped(int index) {
+    if (index == _currentIndex) {
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+      return;
+    }
+    setState(() => _currentIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -89,9 +98,15 @@ class _HomeShellState extends State<HomeShell> {
                               onReportDamagedSeat: () {
                                 Navigator.push(ctx2, MaterialPageRoute(
                                   builder: (ctx3) => CSDamagedSeatScreen(
-                                    onAddPhoto: () {
+                                    onAddPhoto: (seats) {
                                       Navigator.push(ctx3, MaterialPageRoute(
-                                        builder: (_) => const CSAddIncidentScreen(),
+                                        builder: (ctx4) => CSAddIncidentScreen(
+                                          reportedSeats: seats,
+                                          // Tạo xong: quay về Sơ đồ ghế để thấy ghế vừa báo hư (màu cam).
+                                          onSubmit: () => Navigator.of(ctx4)
+                                            ..pop()
+                                            ..pop(),
+                                        ),
                                       ));
                                     },
                                   ),
@@ -106,8 +121,14 @@ class _HomeShellState extends State<HomeShell> {
                   onHandover: () {
                     Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSHandoverScreen()));
                   },
-                  onNotifications: () {
-                    Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSNotificationScreen()));
+                  onNotifications: (bellCtx) {
+                    showCSNotificationPopover(
+                      navCtx,
+                      anchorContext: bellCtx,
+                      onViewAll: () {
+                        Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSNotificationScreen()));
+                      },
+                    );
                   },
                 )
               )
@@ -163,7 +184,7 @@ class _HomeShellState extends State<HomeShell> {
         ),
         bottomNavigationBar: CSBottomNav(
           selectedIndex: _currentIndex,
-          onChanged: (i) => setState(() => _currentIndex = i),
+          onChanged: _onTabTapped,
         ),
       ),
     );

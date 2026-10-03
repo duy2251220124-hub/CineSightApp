@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import '../mock/mock_data.dart';
+import '../mock/seat_report_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/cs_primary_button.dart';
 import '../widgets/cs_screen_header.dart';
 
 class CSAddIncidentScreen extends StatefulWidget {
+  /// Nếu truyền vào, sẽ thay cho hành vi mặc định (Navigator.pop) sau khi tạo.
   final VoidCallback? onSubmit;
   final VoidCallback? onAddPhoto;
+
+  /// Ghế hư được chọn từ màn "Báo ghế hư" — dùng để điền sẵn form.
+  final List<String> reportedSeats;
 
   const CSAddIncidentScreen({
     super.key,
     this.onSubmit,
     this.onAddPhoto,
+    this.reportedSeats = const [],
   });
 
   @override
@@ -39,9 +45,35 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
     }
   }
 
+  void _handleSubmit() {
+    final seats = widget.reportedSeats;
+    if (seats.isNotEmpty) {
+      SeatReportStore.submit(seats);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          seats.isNotEmpty
+              ? 'Đã báo hư ${seats.length} ghế: ${seats.join(', ')}'
+              : 'Đã tạo sự cố & bàn giao ca',
+        ),
+        backgroundColor: CSAppColors.success,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    if (widget.onSubmit != null) {
+      widget.onSubmit!();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final incident = CSMockData.incidents[1];
+    final seats = widget.reportedSeats;
+    final fromSeats = seats.isNotEmpty;
+    final seatText = seats.join(', ');
 
     return Scaffold(
       body: SafeArea(
@@ -57,7 +89,7 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                 children: [
                   const CSFormLabel('CHỌN PHÒNG / RẠP CHIẾU'),
                   DropdownButtonFormField<String>(
-                    initialValue: incident.room,
+                    initialValue: fromSeats ? 'Rạp 5' : incident.room,
                     items: CSMockData.rooms.map((room) {
                       return DropdownMenuItem(
                         value: room.name,
@@ -69,21 +101,24 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                   const SizedBox(height: 12),
                   const CSFormLabel('VỊ TRÍ / HẠNG MỤC SỰ CỐ'),
                   TextFormField(
-                    initialValue: incident.position,
+                    initialValue: fromSeats ? 'Ghế: $seatText' : incident.position,
                     style: const TextStyle(color: Colors.white),
                   ),
                   const SizedBox(height: 12),
                   const CSFormLabel('TIÊU ĐỀ SỰ CỐ'),
                   TextFormField(
-                    initialValue: incident.title,
+                    initialValue: fromSeats ? 'Ghế hư: $seatText' : incident.title,
                     style: const TextStyle(color: Colors.white),
                   ),
                   const SizedBox(height: 12),
                   const CSFormLabel('MÔ TẢ CHI TIẾT SỰ CỐ'),
                   TextFormField(
-                    initialValue: incident.description,
+                    initialValue: fromSeats ? '' : incident.description,
                     maxLines: 4,
                     style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: 'Mô tả tình trạng hư hỏng...',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   const CSFormLabel('MỨC ĐỘ ƯU TIÊN KHẮC PHỤC'),
@@ -170,10 +205,7 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
               padding: const EdgeInsets.all(10),
               child: CSPrimaryButton(
                 label: 'Tạo sự cố & bàn giao ca',
-                onPressed: () {
-                  if (widget.onSubmit != null) widget.onSubmit!();
-                  Navigator.pop(context);
-                },
+                onPressed: _handleSubmit,
               ),
             ),
           ],

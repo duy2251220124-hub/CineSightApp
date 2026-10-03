@@ -4,6 +4,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/database/hive_service.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/time_format.dart';
 import '../../../theme/app_theme.dart';
 import '../../../mock/mock_data.dart';
 import '../../../widgets/cs_app_card.dart';
@@ -30,6 +31,17 @@ class _ScannerScreenState extends State<ScannerScreen> {
   String? lastScannedCode;
   bool isProcessing = false;
 
+  CSMockMovie get _movie => CSMockData.movies.firstWhere(
+        (m) => m.roomId == widget.roomId,
+        orElse: () => CSMockData.movies.first,
+      );
+
+  /// Số vé đã soát thật (đọc từ lịch sử Hive) của phòng + suất hiện tại.
+  int get _scannedCount => HiveService.getScanHistory(
+        roomId: widget.roomId,
+        showId: widget.showId,
+      ).length;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -52,40 +64,65 @@ class _ScannerScreenState extends State<ScannerScreen> {
               data['room'] == null ||
               data['seat'] == null ||
               data['show'] == null) {
-            _showError('Mã không hợp lệ');
-            return;
-          }
-
-          if (data['room'] != widget.roomId) {
-            _showError('Sai phòng (QR: ${data["room"]}, đang soát: ${widget.roomId})');
-            return;
-          }
-
-          if (widget.showId.isNotEmpty && data['show'] != widget.showId) {
-            _showError('Sai suất (QR: ${data["show"]}, đang soát: ${widget.showId})');
-            return;
-          }
-
-          final rawTickets = HiveService.getAllScannedTickets();
-          final String ticketId = data['ticket'];
-          final alreadyScanned = rawTickets.any((raw) {
-            try {
-              return jsonDecode(raw)['ticket'] == ticketId;
-            } catch (_) {
-              return false;
-            }
-          });
-
-          if (alreadyScanned) {
             _showResultBottomSheet(
-              ticketId,
-              seat: data['seat'] ?? '',
-              type: CSScanResultType.used,
-              title: 'VÉ ĐÃ QUÉT',
+              'LỖI DỮ LIỆU',
+              type: CSScanResultType.invalid,
+              title: 'MÃ KHÔNG HỢP LỆ',
+              time: formatScanTime(DateTime.now()),
             );
             return;
           }
 
+          if (data['room'] != widget.roomId) {
+            _showResultBottomSheet(
+              '${data["ticket"] ?? "KHÔNG RÕ"}',
+              seat: '${data["seat"] ?? ""}',
+              type: CSScanResultType.invalid,
+              title: 'VÉ SAI PHÒNG',
+              time: formatScanTime(DateTime.now()),
+              customer: 'QR: ${data["room"]} - Rạp: ${widget.roomId}',
+            );
+            return;
+          }
+
+          if (widget.showId.isNotEmpty && data['show'] != widget.showId) {
+            _showResultBottomSheet(
+              '${data["ticket"] ?? "KHÔNG RÕ"}',
+              seat: '${data["seat"] ?? ""}',
+              type: CSScanResultType.invalid,
+              title: 'VÉ SAI SUẤT',
+              time: formatScanTime(DateTime.now()),
+              customer: 'QR: ${data["show"]} - Suất: ${widget.showId}',
+            );
+            return;
+          }
+
+          final String ticketId = '${data['ticket']}';
+          final String seat = '${data['seat']}';
+          final String customer = '${data['customer'] ?? data['name'] ?? ''}';
+
+          // Kiểm tra trùng bằng lịch sử vĩnh viễn
+          final previous = HiveService.findScanRecord(ticketId);
+          if (previous != null) {
+            _showResultBottomSheet(
+              ticketId,
+              seat: seat,
+              type: CSScanResultType.used,
+              title: 'VÉ ĐÃ QUÉT',
+              time: formatScanTime(previous.scannedAt),
+              previousGate: 'Máy soát này · ${_movie.room}',
+            );
+            return;
+          }
+
+          final now = DateTime.now();
+          await HiveService.addScanRecord(ScanRecord(
+            ticket: ticketId,
+            room: '${data['room']}',
+            seat: seat,
+            show: '${data['show']}',
+            scannedAt: now,
+          ));
           await HiveService.saveScannedTicket(code);
 
           ApiClient.syncTicketsToServer(widget.roomId, widget.showId).then((success) {
@@ -94,14 +131,24 @@ class _ScannerScreenState extends State<ScannerScreen> {
             }
           });
 
+          if (!mounted) return;
+          setState(() {}); // cập nhật bộ đếm "Đã soát"
+
           _showResultBottomSheet(
             ticketId,
-            seat: data['seat'] ?? '',
+            seat: seat,
             type: CSScanResultType.success,
             title: 'QUÉT THÀNH CÔNG',
+            time: formatScanTime(now),
+            customer: customer,
           );
         } catch (e) {
-          _showError('Mã không hợp lệ');
+          _showResultBottomSheet(
+            'LỖI ĐỊNH DẠNG',
+            type: CSScanResultType.invalid,
+            title: 'MÃ KHÔNG HỢP LỆ',
+            time: formatScanTime(DateTime.now()),
+          );
         }
       }
     }
@@ -136,27 +183,31 @@ class _ScannerScreenState extends State<ScannerScreen> {
     String seat = '',
     CSScanResultType type = CSScanResultType.success,
     String title = 'Soát vé thành công',
+    String time = '',
+    String customer = '',
+    String previousGate = '',
   }) {
+    final movie = _movie;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
+      builder: (sheetContext) {
         return CSScanResultView(
           result: CSMockScanResult(
             type: type,
             title: title,
             seat: seat,
-            quantity: '1 Vé',
-            customer: 'Khách lẻ',
+            quantity: '1 vé',
+            customer: customer,
             ticketCode: ticketCode,
-            usedAt: '19:30',
-            previousGate: '',
-            scanned: 11,
-            total: 120,
+            usedAt: time,
+            previousGate: previousGate,
+            scanned: _scannedCount,
+            total: movie.capacity,
           ),
-          movie: CSMockData.movies.firstWhere((m) => m.roomId == widget.roomId, orElse: () => CSMockData.movies.first),
-          onScanNext: () => Navigator.pop(context),
+          movie: movie,
+          onScanNext: () => Navigator.pop(sheetContext),
         );
       },
     ).then((_) {
@@ -188,10 +239,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
+                if (Navigator.canPop(context))
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.maybePop(context),
+                  )
+                else
+                  const SizedBox(width: 48),
                 IconButton(
                   icon: const Icon(Icons.flash_on, color: Colors.white),
                   onPressed: _toggleFlash,
@@ -226,13 +280,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _StatItem(
-                          value: '13',
+                          value: '$_scannedCount',
                           label: 'Đã soát',
                           color: CSAppColors.primary,
                         ),
                         Container(width: 1, height: 30, color: Colors.white24),
-                        const _StatItem(
-                          value: '120',
+                        _StatItem(
+                          value: '${_movie.capacity}',
                           label: 'Tổng vé',
                         ),
                       ],
@@ -242,13 +296,17 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.push(
+                      onPressed: () async {
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const CSScanHistoryScreen(),
+                            builder: (_) => CSScanHistoryScreen(
+                              roomId: widget.roomId,
+                              showId: widget.showId,
+                            ),
                           ),
                         );
+                        if (mounted) setState(() {});
                       },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,

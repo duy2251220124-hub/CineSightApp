@@ -1,51 +1,50 @@
 import 'package:flutter/material.dart';
+
 import '../mock/mock_data.dart';
+import '../mock/seat_report_store.dart';
 import '../theme/app_theme.dart';
 
-class CSSeatMap extends StatefulWidget {
+class CSSeatMap extends StatelessWidget {
+  /// Bật ở màn "Chi tiết cảnh báo": hiện ghế cảnh báo (đỏ) và ghế trục trặc
+  /// mẫu của kịch bản cảnh báo (cam).
   final bool showWarnings;
+
+  /// Bật ở màn "Sơ đồ ghế" / "Báo ghế hư": cho phép chạm để chọn ghế hư.
+  /// Lựa chọn được lưu ở [SeatReportStore.selected].
   final bool selectionMode;
+
+  /// Ghế đã được xử lý xong -> trả về màu bình thường.
   final List<String> ignoredSeats;
-  final Function(List<String>)? onSelectionChanged;
 
   const CSSeatMap({
     super.key,
     this.showWarnings = false,
     this.selectionMode = false,
     this.ignoredSeats = const [],
-    this.onSelectionChanged,
   });
 
-  @override
-  State<CSSeatMap> createState() => _CSSeatMapState();
-}
-
-class _CSSeatMapState extends State<CSSeatMap> {
-  final List<String> _selectedSeats = [];
-
-  Color _seatColor(String seat) {
-    if (widget.ignoredSeats.contains(seat)) {
-      if (CSMockData.occupiedSeats.contains(seat) || CSMockData.warningSeats.contains(seat)) return CSAppColors.primary;
+  Color _seatColor(String seat, Set<String> selected, Set<String> reported) {
+    if (ignoredSeats.contains(seat)) {
+      if (CSMockData.occupiedSeats.contains(seat) ||
+          CSMockData.warningSeats.contains(seat)) {
+        return CSAppColors.primary;
+      }
       return CSAppColors.surfaceStrong;
     }
 
-    // In selection mode, tapped seats become WARNING (orange)
-    if (widget.selectionMode && _selectedSeats.contains(seat)) {
+    if (selectionMode && selected.contains(seat)) {
       return CSAppColors.warning;
     }
-    // Also keep previously selected broken seats red/orange if needed, but let's just use warning
-    if (widget.selectionMode && CSMockData.selectedBrokenSeats.contains(seat) && !_selectedSeats.contains(seat)) {
-      // If it was pre-selected in mock, we can show it as warning too, 
-      // but to allow toggle, we just rely on _selectedSeats if we wanted full control.
-      // For visual sake, let's keep it.
-      return CSAppColors.warning; 
-    }
 
-    if (widget.showWarnings && CSMockData.warningSeats.contains(seat)) {
+    if (showWarnings && CSMockData.warningSeats.contains(seat)) {
       return CSAppColors.danger;
     }
 
-    if (CSMockData.brokenSeats.contains(seat)) {
+    if (showWarnings && CSMockData.brokenSeats.contains(seat)) {
+      return CSAppColors.warning;
+    }
+
+    if (reported.contains(seat)) {
       return CSAppColors.warning;
     }
 
@@ -56,22 +55,22 @@ class _CSSeatMapState extends State<CSSeatMap> {
     return CSAppColors.surfaceStrong;
   }
 
-  void _handleTap(String seat) {
-    if (!widget.selectionMode) return;
-    setState(() {
-      if (_selectedSeats.contains(seat)) {
-        _selectedSeats.remove(seat);
-      } else {
-        _selectedSeats.add(seat);
-      }
-    });
-    if (widget.onSelectionChanged != null) {
-      widget.onSelectionChanged!(_selectedSeats);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: SeatReportStore.reported,
+      builder: (context, reported, _) {
+        return ValueListenableBuilder<Set<String>>(
+          valueListenable: SeatReportStore.selected,
+          builder: (context, selected, _) {
+            return _buildMap(selected, reported);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMap(Set<String> selected, Set<String> reported) {
     const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K'];
 
     return Column(
@@ -81,20 +80,14 @@ class _CSSeatMapState extends State<CSSeatMap> {
           height: 12,
           decoration: BoxDecoration(
             border: const Border(
-              top: BorderSide(
-                color: CSAppColors.primary,
-                width: 2,
-              ),
+              top: BorderSide(color: CSAppColors.primary, width: 2),
             ),
             borderRadius: BorderRadius.circular(50),
           ),
         ),
         const Text(
           'MÀN HÌNH / SCREEN',
-          style: TextStyle(
-            color: CSAppColors.muted,
-            fontSize: 9,
-          ),
+          style: TextStyle(color: CSAppColors.muted, fontSize: 9),
         ),
         const SizedBox(height: 16),
         ...rows.map((row) {
@@ -116,18 +109,25 @@ class _CSSeatMapState extends State<CSSeatMap> {
                 ),
                 ...List.generate(8, (index) {
                   final seat = '$row${index + 1}';
-                  
+                  final isSelected = selectionMode && selected.contains(seat);
+
                   return GestureDetector(
-                    onTap: () => _handleTap(seat),
-                    child: Container(
+                    onTap: selectionMode
+                        ? () => SeatReportStore.toggle(seat)
+                        : null,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
                       width: 33,
                       height: 27,
                       margin: const EdgeInsets.symmetric(horizontal: 2.5),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: _seatColor(seat),
+                        color: _seatColor(seat, selected, reported),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: CSAppColors.border),
+                        border: Border.all(
+                          color: isSelected ? Colors.white : CSAppColors.border,
+                          width: isSelected ? 2 : 1,
+                        ),
                       ),
                       child: Text(
                         seat,
@@ -196,10 +196,7 @@ class CSLegendItem extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(
-            color: CSAppColors.muted,
-            fontSize: 10,
-          ),
+          style: const TextStyle(color: CSAppColors.muted, fontSize: 10),
         ),
       ],
     );
