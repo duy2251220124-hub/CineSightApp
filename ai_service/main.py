@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 import cv2
 import numpy as np
-from database import get_seats, init_db
+from database import get_seats, init_db, save_alerts, get_active_alerts
 from seat_mapper import load_seats_config, process_ai_detections, generate_alerts
 
 app = FastAPI(
@@ -81,6 +81,12 @@ async def analyze_cinema_room(
     tap_B = process_ai_detections(detected_heads, seats_config)
     alert_result = generate_alerts(tap_A, tap_B, room_id, len(seats_config))
 
+    # LÆ°u cáº£nh bÃ¡o vÃ o Database
+    if alert_result["illegal_occupants"]:
+        save_alerts(room_id, show_id, "illegal_occupant", alert_result["illegal_occupants"])
+    if alert_result["missing_guests"]:
+        save_alerts(room_id, show_id, "missing_guest", alert_result["missing_guests"])
+
     return {
         "status": "success",
         "room_id": room_id,
@@ -93,6 +99,12 @@ async def analyze_cinema_room(
         },
         "alerts": alert_result
     }
+
+
+@app.get("/api/v1/alerts")
+def fetch_alerts(room_id: str = None):
+    alerts = get_active_alerts(room_id)
+    return {"status": "success", "alerts": alerts}
 
 print("[INFO] Đang tải mô hình YOLO...")
 try:
