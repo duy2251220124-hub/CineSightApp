@@ -1,0 +1,29 @@
+[INFO] Bắt đầu huấn luyện mô hình YOLOv8n (Bản V1 Placeholder)...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+==================================================
+[THÀNH CÔNG] Huấn luyện hoàn tất!
+File weights tốt nhất được lưu tại: runs/detect/head_detect_v1/weights/best.pt
+==================================================

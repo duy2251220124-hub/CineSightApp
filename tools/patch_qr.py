@@ -1,7 +1,6 @@
-import sys
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout.reconfigure(encoding='utf-8')
-import qrcode
+﻿import sys
+
+content = '''import qrcode
 import json
 import os
 import argparse
@@ -80,3 +79,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+'''
+
+with open(r'c:\CineSightApp\tools\make_qr.py', 'w', encoding='utf-8') as f:
+    f.write(content)

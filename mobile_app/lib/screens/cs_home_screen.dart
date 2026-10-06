@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../mock/mock_data.dart';
+import '../core/network/api_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/cs_app_card.dart';
 import '../widgets/cs_movie_card.dart';
@@ -30,17 +31,17 @@ class CSHomeScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        CSMockData.employeeName,
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                        (ApiClient.currentUser?['name'] ?? CSMockData.employeeName),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       Text(
-                        '${CSMockData.employeeRole} · ${CSMockData.employeeId}',
-                        style: TextStyle(
+                        '${(ApiClient.currentUser?['role'] ?? CSMockData.employeeRole)} · ${(ApiClient.currentUser?['id']?.toString() ?? CSMockData.employeeId)}',
+                        style: const TextStyle(
                           color: CSAppColors.muted,
                           fontSize: 11,
                         ),
@@ -110,7 +111,7 @@ class CSHomeScreen extends StatelessWidget {
             const SizedBox(height: 18),
             const Text(
               'Các suất gần nhất',
-              style: TextStyle(fontWeight: FontWeight.w700),
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
             ...List.generate(CSMockData.movies.length, (index) {

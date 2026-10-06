@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import Dashboard from './pages/Dashboard';
+import Alerts from './pages/Alerts';
+import Rooms from './pages/Rooms';
+import Tickets from './pages/Tickets';
+import Settings from './pages/Settings';
+import Employees from './pages/Employees';
 import '../src/styles/dashboard.css';
 
 const NAV_ITEMS = [
@@ -7,6 +12,7 @@ const NAV_ITEMS = [
   { id: 'alerts',    label: 'Cảnh báo',         icon: '🚨' },
   { id: 'rooms',     label: 'Quản lý phòng',     icon: '🎬' },
   { id: 'tickets',   label: 'Danh sách vé',      icon: '🎫' },
+  { id: 'employees', label: 'Nhân sự',          icon: '👥' },
   { id: 'settings',  label: 'Cài đặt',           icon: '⚙️' },
 ];
 
@@ -35,12 +41,11 @@ function App() {
       {/* NỘI DUNG CHÍNH */}
       <div className="main-content">
         {activePage === 'dashboard' && <Dashboard />}
-        {activePage !== 'dashboard' && (
-          <div style={{ color: '#555', marginTop: 80, textAlign: 'center', fontSize: '1rem' }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🚧</div>
-            <div>Trang <strong style={{ color: '#e0e0e0' }}>"{NAV_ITEMS.find(n => n.id === activePage)?.label}"</strong> đang được xây dựng...</div>
-          </div>
-        )}
+        {activePage === 'alerts' && <Alerts />}
+        {activePage === 'rooms' && <Rooms />}
+        {activePage === 'tickets' && <Tickets />}
+        {activePage === 'employees' && <Employees />}
+        {activePage === 'settings' && <Settings />}
       </div>
     </div>
   );

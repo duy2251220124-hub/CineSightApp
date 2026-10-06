@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/database/hive_service.dart';
@@ -46,6 +47,22 @@ class _ScannerScreenState extends State<ScannerScreen> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+
+  void _simulateScan(String payload) {
+    if (isProcessing) return;
+    setState(() => isProcessing = true);
+    
+    // Fake BarcodeCapture
+    final mockBarcode = Barcode(rawValue: payload, format: BarcodeFormat.qrCode);
+    final mockCapture = BarcodeCapture(barcodes: [mockBarcode]);
+    
+    // We delay slightly to simulate processing, then handle normally.
+    // However, _handleBarcode is private and takes a BarcodeCapture.
+    // Actually, we can just call _handleBarcode(mockCapture) but wait, we need to bypass isProcessing check there or just reset it.
+    setState(() => isProcessing = false); 
+    _handleBarcode(mockCapture);
   }
 
   void _handleBarcode(BarcodeCapture capture) async {

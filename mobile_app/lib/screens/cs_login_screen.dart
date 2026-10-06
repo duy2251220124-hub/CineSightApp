@@ -1,4 +1,4 @@
-
+﻿
 
 import 'package:flutter/material.dart';
 
@@ -7,6 +7,7 @@ import '../mock/mock_data.dart';
 import '../theme/app_theme.dart';
 
 import '../widgets/cs_primary_button.dart';
+import '../core/network/api_client.dart';
 
 
 
@@ -39,6 +40,9 @@ class CSLoginScreen extends StatefulWidget {
 
 
 class _CSLoginScreenState extends State<CSLoginScreen> {
+  final _userCtrl = TextEditingController(text: 'staff');
+  final _passCtrl = TextEditingController(text: '123456');
+  bool _isLoading = false;
 
   bool _hidePassword = true;
 
@@ -100,7 +104,7 @@ class _CSLoginScreenState extends State<CSLoginScreen> {
 
                 child: Text(
 
-                  'Đăng nhập',
+                  'ÄÄƒng nháº­p',
 
                   style: TextStyle(
 
@@ -130,11 +134,7 @@ class _CSLoginScreenState extends State<CSLoginScreen> {
 
               const SizedBox(height: 22),
 
-              const TextField(
-
-                decoration: InputDecoration(
-
-                  prefixIcon: Icon(Icons.person_outline),
+              TextField(controller: _userCtrl, decoration: const InputDecoration(prefixIcon: Icon(Icons.person_outline),
 
                   hintText: 'Mã nhân viên / Username',
 
@@ -144,15 +144,11 @@ class _CSLoginScreenState extends State<CSLoginScreen> {
 
               const SizedBox(height: 16),
 
-              TextField(
-
-                obscureText: _hidePassword,
-
-                decoration: InputDecoration(
+              TextField(controller: _passCtrl, obscureText: _hidePassword, decoration: InputDecoration(
 
                   prefixIcon: const Icon(Icons.lock_outline),
 
-                  hintText: 'Mật khẩu / PIN',
+                  hintText: 'Máº­t kháº©u / PIN',
 
                   suffixIcon: IconButton(
 
@@ -180,13 +176,26 @@ class _CSLoginScreenState extends State<CSLoginScreen> {
 
               const SizedBox(height: 22),
 
-              CSPrimaryButton(
+              
+              if (_isLoading)
+                const CircularProgressIndicator()
+              else
+                CSPrimaryButton(
+                  label: 'Đăng nhập',
+                  onPressed: () async {
+                    setState(() => _isLoading = true);
+                    final success = await ApiClient.login(_userCtrl.text, _passCtrl.text);
+                    setState(() => _isLoading = false);
+                    if (success && widget.onLogin != null) {
+                      widget.onLogin!();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Lỗi đăng nhập')),
+                      );
+                    }
+                  },
+                ),
 
-                label: 'Đăng nhập',
-
-                onPressed: widget.onLogin,
-
-              ),
 
               TextButton(
 

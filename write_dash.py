@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+﻿import sys
+
+content = '''import { useState, useEffect } from 'react';
 import { analyzeRoom, healthCheck, getActiveAlerts, resolveAlert } from '../api/cineSightApi';
 import '../styles/dashboard.css';
 
@@ -15,13 +17,13 @@ export default function Dashboard() {
   const [prevAlertIds, setPrevAlertIds] = useState(new Set());
   const [newAlertId, setNewAlertId] = useState(null);
 
-  // Đồng hồ SOC
+  // Ä á»“ng há»“ SOC
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Kiểm tra Server Health
+  // Kiá»ƒm tra Server Health
   useEffect(() => {
     const check = async () => {
       try {
@@ -36,22 +38,22 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch Alerts và phát hiện cảnh báo mới
+  // Fetch Alerts vÃ  phÃ¡t hiá»‡n cáº£nh bÃ¡o má»›i
   const getAlerts = async () => {
     try {
       const data = await getActiveAlerts();
       setAlerts(data);
       
       const currentIds = new Set(data.map(a => a.id));
-      // Tìm alert mới nhất (nếu có)
+      // TÃ¬m alert má»›i nháº¥t (náº¿u cÃ³)
       const newIds = data.filter(a => !prevAlertIds.has(a.id)).map(a => a.id);
       if (newIds.length > 0 && prevAlertIds.size > 0) {
-        setNewAlertId(newIds[0]); // Chỉ highlight 1 dòng mới nhất
-        setTimeout(() => setNewAlertId(null), 3000); // Tắt hiệu ứng sau 3s
+        setNewAlertId(newIds[0]); // Chá»‰ highligh 1 dÃ²ng má»›i nháº¥t
+        setTimeout(() => setNewAlertId(null), 3000); // Táº¯t hiá»‡u á»©ng sau 3s
       }
       setPrevAlertIds(currentIds);
     } catch (e) {
-      console.error('Lỗi fetch:', e);
+      console.error('Lá»—i fetch:', e);
     }
   };
 
@@ -62,13 +64,13 @@ export default function Dashboard() {
   }, [prevAlertIds]);
 
   const handleAnalyze = async () => {
-    if (!imageFile) return alert('Yêu cầu chọn ảnh snapshot.');
+    if (!imageFile) return alert('YÃªu cáº§u chá» n áº£nh snapshot.');
     setIsAnalyzing(true);
     try {
       await analyzeRoom(selectedRoom, showId, imageFile);
-      await getAlerts(); // Cập nhật ngay
+      await getAlerts(); // Cáº­p nháº­t tÃ¬nh trConfiguration ngay
     } catch (e) {
-      alert('Lỗi AI: ' + e.message);
+      alert('Lá»—i AI: ' + e.message);
     }
     setIsAnalyzing(false);
   };
@@ -76,9 +78,9 @@ export default function Dashboard() {
   const handleResolve = async (id) => {
     try {
       await resolveAlert(id);
-      await getAlerts(); // Cập nhật lại lưới
+      await getAlerts(); // Cáº­p nháº­t láº¡i lÆ°á»›i
     } catch (e) {
-      alert('Không thể giải quyết: ' + e.message);
+      alert('KhÃ´ng thá»ƒ giáº£i quyáº¿t: ' + e.message);
     }
   };
 
@@ -93,7 +95,7 @@ export default function Dashboard() {
       <header className="soc-header">
         <div className="soc-brand">CINESIGHT SOC</div>
         <div className="soc-status">
-          <span className={`status-indicator ${serverOnline ? 'online' : 'offline'}`}></span>
+          <span className={status-indicator }></span>
           API: {serverOnline ? 'ONLINE' : 'OFFLINE'}
         </div>
         <div className="soc-clock">{currentTime.toLocaleTimeString('vi-VN', { hour12: false })}</div>
@@ -102,33 +104,25 @@ export default function Dashboard() {
       {/* QUICK STATS & MANUAL SCAN (2 COLUMNS) */}
       <div className="soc-controls-row">
         <div className="soc-panel soc-stats">
-          <div className="panel-title">TỔNG QUAN HÔM NAY</div>
+          <div className="panel-title">Tá»”NG QUAN HÃ”M NAY</div>
           <div className="stats-bar">
-            <span className="stat-item"><span className="stat-label">TỔNG CẢNH BÁO:</span> <span className="stat-val">{totalCount}</span></span>
-            <span className="stat-item"><span className="stat-label">KHÁCH LẬU (ĐỎ):</span> <span className="stat-val alert-red">{illegalCount}</span></span>
-            <span className="stat-item"><span className="stat-label">VẮNG MẶT (CAM):</span> <span className="stat-val alert-amber">{missingCount}</span></span>
-            <span className="stat-item"><span className="stat-label">VƯỢT TẢI (XANH):</span> <span className="stat-val alert-blue">{overCapCount}</span></span>
+            <span className="stat-item"><span className="stat-label">Tá»”NG Cáº¢NH BÃ O:</span> <span className="stat-val">{totalCount}</span></span>
+            <span className="stat-item"><span className="stat-label">KHÃ CH Láº¬U (Ä á»Ž):</span> <span className="stat-val alert-red">{illegalCount}</span></span>
+            <span className="stat-item"><span className="stat-label">VÃ€NG Máº¶T (VÃ€NG):</span> <span className="stat-val alert-amber">{missingCount}</span></span>
+            <span className="stat-item"><span className="stat-label">VÆ¯á»¢T Táº¢I (Ä á»Ž):</span> <span className="stat-val alert-red">{overCapCount}</span></span>
           </div>
         </div>
 
         <div className="soc-panel soc-manual">
-          <div className="panel-title">KIỂM TRA THỦ CÔNG</div>
+          <div className="panel-title">KIá»‚M TRA THá»¦ CÃ”NG</div>
           <div className="manual-form">
             <select value={selectedRoom} onChange={e => setSelectedRoom(e.target.value)} className="soc-input">
               <option value="room1">IMAX (room1)</option>
               <option value="room2">2D (room2)</option>
             </select>
-            <div className="file-input-wrapper">
-              <label className="file-input-btn">
-                Chọn ảnh...
-                <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])} hidden />
-              </label>
-              <span className="file-name-display" title={imageFile ? imageFile.name : 'Chưa chọn file'}>
-                {imageFile ? imageFile.name : 'Chưa chọn file'}
-              </span>
-            </div>
+            <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])} className="soc-input file-input" />
             <button className="soc-btn primary" onClick={handleAnalyze} disabled={isAnalyzing || !serverOnline}>
-              {isAnalyzing ? 'ĐANG XỬ LÝ...' : 'CHẠY AI'}
+              {isAnalyzing ? 'Ä ANG Xá»¬ LÃ ...' : 'CHáº Y AI'}
             </button>
           </div>
         </div>
@@ -136,47 +130,35 @@ export default function Dashboard() {
 
       {/* LIVE ALERTS FEED */}
       <div className="soc-panel soc-feed">
-        <div className="panel-title">CẢNH BÁO CHỜ XỬ LÝ (LIVE)</div>
+        <div className="panel-title">Cáº¢NH BÃ O CHá»œ Xá»¬ LÃ  (LIVE)</div>
         <div className="table-wrapper">
           <table className="soc-table">
             <thead>
               <tr>
-                <th>Thời gian</th>
-                <th>Suất chiếu</th>
-                <th>Phòng</th>
-                <th>Ghế</th>
-                <th>Vấn đề</th>
-                <th className="align-right">Thao tác</th>
+                <th>Thá» i gian</th>
+                <th>Suáº¥t chiáº¿u</th>
+                <th>PhÃ²ng</th>
+                <th>Gháº¿</th>
+                <th>Váº¥n Ä‘á» </th>
+                <th className="align-right">Thao tÃ¡c</th>
               </tr>
             </thead>
             <tbody>
               {alerts.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="empty-state">Không có cảnh báo nào cần xử lý.</td>
+                  <td colSpan="6" className="empty-state">KhÃ´ng cÃ³ cáº£nh bÃ¡o nÃ o cáº§n xá»­ lÃ½.</td>
                 </tr>
               ) : alerts.map(a => {
                 let rowClass = '';
-                let icon = null;
+                let icon = '';
                 let label = '';
                 
                 if (a.alert_type === 'illegal_occupant') {
-                  rowClass = 'row-critical'; 
-                  label = 'Khách lậu';
-                  icon = (
-                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-                  );
+                  rowClass = 'row-critical'; icon = 'â—¼ï¸ '; label = 'KhÃ¡ch láº­u';
                 } else if (a.alert_type === 'over_capacity') {
-                  rowClass = 'row-capacity'; 
-                  label = 'Vượt tải';
-                  icon = (
-                    <svg viewBox="0 0 24 24"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
-                  );
+                  rowClass = 'row-critical'; icon = 'â—¼ï¸ '; label = 'VÆ°á»£t táº£i';
                 } else {
-                  rowClass = 'row-warning'; 
-                  label = 'Trống ghế';
-                  icon = (
-                    <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-                  );
+                  rowClass = 'row-warning'; icon = 'â–´ï¸ '; label = 'Trá»‘ng gháº¿';
                 }
 
                 if (a.id === newAlertId) {
@@ -194,7 +176,7 @@ export default function Dashboard() {
                     </td>
                     <td className="align-right">
                       <button className="soc-btn action-btn" onClick={() => handleResolve(a.id)}>
-                        Đánh dấu đã xử lý
+                        Ä Ã¡nh dáº¥u Ä‘Ã£ xá»­ lÃ½
                       </button>
                     </td>
                   </tr>
@@ -207,3 +189,7 @@ export default function Dashboard() {
     </div>
   );
 }
+'''
+
+with open(r'c:\CineSightApp\web_admin\src\pages\Dashboard.jsx', 'w', encoding='utf-8') as f:
+    f.write(content)

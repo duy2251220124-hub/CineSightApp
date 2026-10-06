@@ -11,6 +11,26 @@ class ApiClient {
   // Ví dụ: 'https://xxxx-xxxx.ngrok-free.app'
   static const String baseUrl = 'https://quill-device-deny.ngrok-free.dev';
 
+  
+  static Map<String, dynamic>? currentUser;
+
+  static Future<bool> login(String username, String password) async {
+    try {
+      final response = await _dio.post('/api/v1/login', data: {
+        'username': username,
+        'password': password,
+      });
+      if (response.statusCode == 200) {
+        currentUser = response.data['user'];
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[NETWORK] Lá»—i login: ');
+      return false;
+    }
+  }
+
   static final Dio _dio = Dio(
     BaseOptions(
       baseUrl: baseUrl.trim(),

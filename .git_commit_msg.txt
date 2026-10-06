@@ -1,0 +1,7 @@
+feat(admin+backend): Hoàn thiện hệ thống cấp phát tài khoản Nhân sự và phân luồng Network
+
+- Backend: Thêm username/password vào bảng employees, cập nhật CRUD API.
+- Backend: Thêm mới endpoint POST /api/v1/login chuẩn bị cho phân quyền.
+- Web Admin: Tách tab "Nhân sự" ra độc lập, nâng cấp UI form tạo tài khoản.
+- Network: Fix lỗi CORS chặn Web Admin bằng cách chuyển API_BASE về localhost.
+- Docs: Bổ sung RUNNING_GUIDE.md hướng dẫn khởi động và gỡ lỗi toàn bộ hệ thống.
