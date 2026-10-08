@@ -9,3 +9,4 @@ ngrok_bin/
 *.pt
 *.engine
 tools/qr_samples/
+mobile_app/test_hive_dir/

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from ultralytics import YOLO
 import cv2
 import numpy as np
-from database import get_seats, init_db, save_alerts, get_active_alerts, get_all_alerts, resolve_alert, get_tickets_list, get_configs, update_config, get_employees, add_employee, delete_employee
+from database import get_seats, init_db, save_alerts, get_active_alerts, get_all_alerts, resolve_alert, get_tickets_list, get_configs, update_config, get_employees, add_employee, update_employee, delete_employee
 from seat_mapper import load_seats_config, process_ai_detections, generate_alerts
 
 app = FastAPI(
@@ -179,6 +179,14 @@ def create_employee(payload: EmployeePayload):
     try:
         emp_id = add_employee(payload.username, payload.password, payload.name, payload.role)
         return {"status": "success", "id": emp_id}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+@app.put("/api/v1/employees/{emp_id}")
+def edit_employee(emp_id: int, payload: EmployeePayload):
+    try:
+        update_employee(emp_id, payload.username, payload.password, payload.name, payload.role)
+        return {"status": "success", "message": f"Đã cập nhật nhân viên {emp_id}"}
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 

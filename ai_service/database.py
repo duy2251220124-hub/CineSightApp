@@ -161,7 +161,7 @@ def get_employees():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, name, role, created_at FROM employees ORDER BY created_at DESC")
+    cursor.execute("SELECT id, username, password, name, role, created_at FROM employees ORDER BY created_at DESC")
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -174,6 +174,13 @@ def add_employee(username: str, password: str, name: str, role: str):
     conn.commit()
     conn.close()
     return emp_id
+
+def update_employee(emp_id: int, username: str, password: str, name: str, role: str):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE employees SET username=?, password=?, name=?, role=? WHERE id=?", (username, password, name, role, emp_id))
+    conn.commit()
+    conn.close()
 
 def delete_employee(emp_id: int):
     conn = sqlite3.connect(DB_PATH)

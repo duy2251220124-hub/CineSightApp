@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getEmployees, addEmployee, deleteEmployee } from '../api/cineSightApi';
+import { getEmployees, addEmployee, deleteEmployee, updateEmployee } from '../api/cineSightApi';
 import '../styles/dashboard.css';
 
 export default function Employees() {
@@ -7,8 +7,15 @@ export default function Employees() {
   const [empName, setEmpName] = useState('');
   const [empUsername, setEmpUsername] = useState('');
   const [empPassword, setEmpPassword] = useState('');
-  const [empRole, setEmpRole] = useState('Bảo vệ');
+  const [empRole, setEmpRole] = useState('Dọn rạp');
   const [empLoading, setEmpLoading] = useState(false);
+  
+  // Edit state
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({ username: '', password: '', name: '', role: '' });
+  
+  // View password state
+  const [visiblePasswords, setVisiblePasswords] = useState({}); // { empId: boolean }
 
   const fetchInitialData = async () => {
     try {
@@ -53,6 +60,37 @@ export default function Employees() {
     setEmpLoading(false);
   };
 
+  const handleStartEdit = (emp) => {
+    setEditingId(emp.id);
+    setEditData({
+      username: emp.username,
+      password: emp.password,
+      name: emp.name,
+      role: emp.role
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editData.username.trim() || !editData.password.trim() || !editData.name.trim()) return;
+    setEmpLoading(true);
+    try {
+      await updateEmployee(editingId, editData.username.trim(), editData.password.trim(), editData.name.trim(), editData.role);
+      setEditingId(null);
+      const emps = await getEmployees();
+      setEmployees(emps);
+    } catch (e) {
+      alert('Lỗi cập nhật nhân sự: ' + e.message);
+    }
+    setEmpLoading(false);
+  };
+  
+  const togglePasswordVisibility = (id) => {
+    setVisiblePasswords(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   return (
     <div className="soc-container">
       <header className="soc-header" style={{ paddingBottom: 12, borderBottom: 'none' }}>
@@ -72,6 +110,7 @@ export default function Employees() {
                 <tr>
                   <th>ID</th>
                   <th>Tài khoản</th>
+                  <th>Mật khẩu</th>
                   <th>Họ Tên</th>
                   <th>Vai trò</th>
                   <th className="align-right">Thao tác</th>
@@ -80,36 +119,139 @@ export default function Employees() {
               <tbody>
                 {employees.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="empty-state">Chưa có nhân viên nào.</td>
+                    <td colSpan="6" className="empty-state">Chưa có nhân viên nào.</td>
                   </tr>
-                ) : employees.map(emp => (
-                  <tr key={emp.id}>
+                ) : employees.map(emp => {
+                  const isEditing = editingId === emp.id;
+                  return (
+                  <tr key={emp.id} style={{ backgroundColor: isEditing ? 'rgba(0, 255, 255, 0.05)' : 'transparent' }}>
                     <td className="mono font-bold">#{emp.id}</td>
-                    <td className="mono" style={{ color: 'var(--brand-blue)' }}>{emp.username}</td>
-                    <td style={{ color: 'var(--text-main)' }}>{emp.name}</td>
+                    
+                    {/* Username Column */}
                     <td>
-                      <span style={{ 
-                        padding: '4px 8px', 
-                        borderRadius: 4, 
-                        backgroundColor: 'rgba(255,255,255,0.05)',
-                        fontSize: 12,
-                        color: emp.role === 'Quản lý' ? 'var(--brand-blue)' : 'var(--text-dim)'
-                      }}>
-                        {emp.role}
-                      </span>
+                      {isEditing ? (
+                        <input 
+                          type="text" 
+                          className="soc-input"
+                          value={editData.username}
+                          onChange={e => setEditData({...editData, username: e.target.value})}
+                          style={{ padding: '4px 8px', minWidth: 100 }}
+                        />
+                      ) : (
+                        <span className="mono" style={{ color: 'var(--brand-blue)' }}>{emp.username}</span>
+                      )}
                     </td>
+
+                    {/* Password Column */}
+                    <td>
+                      {isEditing ? (
+                        <input 
+                          type="text" 
+                          className="soc-input mono"
+                          value={editData.password}
+                          onChange={e => setEditData({...editData, password: e.target.value})}
+                          style={{ padding: '4px 8px', minWidth: 100 }}
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="mono" style={{ color: 'var(--text-dim)' }}>
+                            {visiblePasswords[emp.id] ? emp.password : '••••••••'}
+                          </span>
+                          <button 
+                            className="soc-btn" 
+                            style={{ padding: '2px 6px', fontSize: 10, minWidth: 'auto', backgroundColor: 'transparent' }}
+                            onClick={() => togglePasswordVisibility(emp.id)}
+                            title={visiblePasswords[emp.id] ? "Ẩn" : "Hiện"}
+                          >
+                            {visiblePasswords[emp.id] ? "ẨN" : "HIỆN"}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Name Column */}
+                    <td>
+                      {isEditing ? (
+                        <input 
+                          type="text" 
+                          className="soc-input"
+                          value={editData.name}
+                          onChange={e => setEditData({...editData, name: e.target.value})}
+                          style={{ padding: '4px 8px', minWidth: 120 }}
+                        />
+                      ) : (
+                        <span style={{ color: 'var(--text-main)' }}>{emp.name}</span>
+                      )}
+                    </td>
+
+                    {/* Role Column */}
+                    <td>
+                      {isEditing ? (
+                        <select 
+                          className="soc-input" 
+                          value={editData.role}
+                          onChange={e => setEditData({...editData, role: e.target.value})}
+                          style={{ padding: '4px 8px' }}
+                        >
+                          <option value="Dọn rạp">Dọn rạp</option>
+                          <option value="Soát vé">Soát vé</option>
+                        </select>
+                      ) : (
+                        <span style={{ 
+                          padding: '4px 8px', 
+                          borderRadius: 4, 
+                          backgroundColor: 'rgba(255,255,255,0.05)',
+                          fontSize: 12,
+                          color: emp.role === 'Quản lý' ? 'var(--brand-blue)' : 'var(--text-dim)'
+                        }}>
+                          {emp.role}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Actions Column */}
                     <td className="align-right">
-                      <button 
-                        className="soc-btn action-btn" 
-                        style={{ color: 'var(--alert-red)', borderColor: 'rgba(255, 65, 77, 0.3)' }}
-                        onClick={() => handleDeleteEmployee(emp.id)}
-                        disabled={empLoading}
-                      >
-                        XÓA
-                      </button>
+                      {isEditing ? (
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <button 
+                            className="soc-btn action-btn" 
+                            onClick={handleSaveEdit}
+                            disabled={empLoading}
+                          >
+                            LƯU
+                          </button>
+                          <button 
+                            className="soc-btn action-btn" 
+                            style={{ borderColor: 'var(--text-dim)', color: 'var(--text-dim)' }}
+                            onClick={() => setEditingId(null)}
+                            disabled={empLoading}
+                          >
+                            HỦY
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <button 
+                            className="soc-btn action-btn" 
+                            style={{ color: 'var(--brand-blue)', borderColor: 'rgba(0, 243, 255, 0.3)' }}
+                            onClick={() => handleStartEdit(emp)}
+                            disabled={empLoading}
+                          >
+                            SỬA
+                          </button>
+                          <button 
+                            className="soc-btn action-btn" 
+                            style={{ color: 'var(--alert-red)', borderColor: 'rgba(255, 65, 77, 0.3)' }}
+                            onClick={() => handleDeleteEmployee(emp.id)}
+                            disabled={empLoading}
+                          >
+                            XÓA
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>
