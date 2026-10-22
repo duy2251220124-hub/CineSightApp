@@ -18,13 +18,13 @@ String toShowId(String date, String timeRange) {
 class CSActiveShowtime {
   static final ValueNotifier<Map<String, String>> notifier = ValueNotifier({
     'roomId': 'room1',
-    'showId': '2026-10-21T20:10',
-    'movieTitle': 'Ngọn Đồi Hoa Hồng Anh',
+    'showId': 'all',
+    'movieTitle': 'Tất cả suất (Tự động)',
   });
 
   static String get roomId => notifier.value['roomId'] ?? 'room1';
-  static String get showId => notifier.value['showId'] ?? '2026-10-21T20:10';
-  static String get movieTitle => notifier.value['movieTitle'] ?? 'Ngọn Đồi Hoa Hồng Anh';
+  static String get showId => notifier.value['showId'] ?? 'all';
+  static String get movieTitle => notifier.value['movieTitle'] ?? 'Tất cả suất (Tự động)';
 
   static void update({required String roomId, required String showId, String? movieTitle}) {
     notifier.value = {

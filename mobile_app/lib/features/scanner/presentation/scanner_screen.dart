@@ -109,7 +109,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     if (_activeShowId.isEmpty) {
       final match2010 = _availableShowtimes.firstWhere(
-        (s) => '${s['show_id']}'.contains('20:10'),
+        (s) => true,
         orElse: () => _availableShowtimes.isNotEmpty ? _availableShowtimes.first : {},
       );
       if (match2010.isNotEmpty) {

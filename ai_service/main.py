@@ -89,6 +89,8 @@ async def analyze_cinema_room(
     contents = await image.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is not None and (img.shape[1] != 1920 or img.shape[0] != 1080):
+        img = cv2.resize(img, (1920, 1080))
 
     detected_heads = []
     if model:
