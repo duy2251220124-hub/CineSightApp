@@ -1,0 +1,9 @@
+=== OFFICIAL MODEL TRAINING SUMMARY (PHASE 7) ===
+Training Time: 125.00 mins
+Train images: 98 (570 heads)
+Val images: 22 (87 heads)
+Precision: 0.9019
+Recall: 0.7586
+mAP@50: 0.8097
+mAP@50-95: 0.3775
+Official Weights: c:\CineSightApp\ai_service\models\best_head_v2.pt

@@ -52,19 +52,33 @@ def load_seats_config(room_id: str):
 def process_ai_detections(detected_heads, seats_config):
     """
     Ánh xạ tọa độ đầu người (từ YOLO) vào mã ghế cụ thể.
+    Hỗ trợ bù góc nhìn nghiêng camera và xử lý 2 khách ngồi cạnh nhau nghiêng đầu sát nhau.
     """
     set_B = set()
-    for head in detected_heads:
-        head_point = (float(head[0]), float(head[1]))
-        for seat_name, polygon in seats_config.items():
-            poly_np = np.array(polygon, np.int32)
-            is_inside = cv2.pointPolygonTest(poly_np, head_point, False)
-            if is_inside >= 0:
-                set_B.add(seat_name)
+    sorted_heads = sorted(detected_heads, key=lambda p: (float(p[1]), float(p[0])))
+    for head in sorted_heads:
+        hx, hy = float(head[0]), float(head[1])
+        matched_seat = None
+        for check_y in (hy + 10.0, hy + 18.0, hy):
+            for seat_name, polygon in seats_config.items():
+                poly_np = np.array(polygon, np.int32)
+                is_inside = cv2.pointPolygonTest(poly_np, (hx, check_y), False)
+                if is_inside >= 0:
+                    matched_seat = seat_name
+                    break
+            if matched_seat:
                 break
+        if matched_seat:
+            if matched_seat in set_B:
+                m = re.match(r'([A-Z]+)(\d+)', matched_seat)
+                if m:
+                    next_seat = f"{m.group(1)}{int(m.group(2)) + 1:02d}"
+                    if next_seat in seats_config and next_seat not in set_B:
+                        matched_seat = next_seat
+            set_B.add(matched_seat)
     return set_B
 
-def generate_alerts(set_A: set, set_B: set, room_id: str, total_seats: int):
+def generate_alerts(set_A: set, set_B: set, room_id: str, total_seats: int, total_detected_people: int = None, capacity_threshold: int = 0):
     """Sinh cảnh báo chênh lệch cho 1 phòng chiếu cụ thể."""
     print(f"\n--- BÁO CÁO KIỂM ĐẾM PHÒNG [{room_id.upper()}] ---")
     print(f"Tập A (App soát vé) : {set_A}")
@@ -72,14 +86,15 @@ def generate_alerts(set_A: set, set_B: set, room_id: str, total_seats: int):
 
     khach_lau = set_B - set_A
     khach_vang = set_A - set_B
-    over_capacity = len(set_B) > total_seats
+    detected_count = total_detected_people if total_detected_people is not None else len(set_B)
+    over_capacity = (detected_count > total_seats) or (capacity_threshold > 0 and len(khach_lau) >= capacity_threshold)
 
     if khach_lau:
         print(f"[ĐỎ] Ngồi không có vé tại: {khach_lau}")
     if khach_vang:
         print(f"[VÀNG] Có vé nhưng ghế trống tại: {khach_vang}")
     if over_capacity:
-        print(f"[ĐỎ] VƯỢT SỨC CHỨA! Phát hiện {len(set_B)} người / {total_seats} ghế.")
+        print(f"[ĐỎ] VƯỢT SỨC CHỨA! Phát hiện {detected_count} người / {total_seats} ghế.")
     if not khach_lau and not khach_vang and not over_capacity:
         print("[XANH] Tất cả khớp! An toàn chiếu phim.")
     

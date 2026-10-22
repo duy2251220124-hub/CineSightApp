@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'core/database/hive_service.dart';
-import 'core/theme/app_theme.dart';
-import 'screens/cs_login_screen.dart';
+import 'package:mobile_app/core/theme/app_theme.dart';
+import 'package:mobile_app/features/auth/presentation/cs_login_screen.dart';
 import 'features/home/presentation/home_screen.dart';
 
 void main() async {

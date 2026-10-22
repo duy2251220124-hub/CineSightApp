@@ -79,7 +79,7 @@ class HiveService {
         .map(ScanRecord.tryParse)
         .whereType<ScanRecord>()
         .where((r) => roomId == null || roomId.isEmpty || r.room == roomId)
-        .where((r) => showId == null || showId.isEmpty || r.show == showId)
+        .where((r) => showId == null || showId.isEmpty || showId == 'all' || r.show == showId)
         .toList()
       ..sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
     return records;
@@ -103,7 +103,7 @@ class HiveService {
   }
 
   /// Xóa toàn bộ vé trong máy SAU KHI đã đồng bộ lên mạng thành công
-    static Future<void> clearTicketsAfterSync(List<String> syncedTickets) async {
+  static Future<void> clearTicketsAfterSync(List<String> syncedTickets) async {
     final box = Hive.box<String>(_ticketBoxName);
     final keysToDelete = [];
     for (var key in box.keys) {
@@ -113,5 +113,14 @@ class HiveService {
     }
     await box.deleteAll(keysToDelete);
     debugPrint('[HIVE] Đã dọn dẹp ${keysToDelete.length} vé khỏi bộ nhớ Offline sau khi đồng bộ!');
+  }
+
+  /// Xóa toàn bộ lịch sử quét vé trên thiết bị để chuẩn bị cho đợt kiểm thử mới
+  static Future<void> clearAllHistory() async {
+    final historyBox = Hive.box<String>(_historyBoxName);
+    final ticketBox = Hive.box<String>(_ticketBoxName);
+    await historyBox.clear();
+    await ticketBox.clear();
+    debugPrint('[HIVE] Đã làm trống toàn bộ lịch sử quét vé!');
   }
 }

@@ -1,23 +1,42 @@
-﻿import { useState, useEffect } from 'react';
-import { getTicketsList } from '../api/cineSightApi';
+import { useState, useEffect, useMemo } from 'react';
+import { getTicketsList, getShowtimes } from '../api/cineSightApi';
 import '../styles/dashboard.css';
 
 export default function Tickets() {
   const [tickets, setTickets] = useState([]);
+  const [showtimes, setShowtimes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [apiMissing, setApiMissing] = useState(false);
 
   const [selectedRoom, setSelectedRoom] = useState('room1');
-  const [selectedShow, setSelectedShow] = useState('2026-09-29T19:30');
+  const [selectedShow, setSelectedShow] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    const loadShows = async () => {
+      try {
+        const list = await getShowtimes(selectedRoom);
+        setShowtimes(list);
+        if (list.length > 0) {
+          setSelectedShow(list[0].show_id);
+        }
+      } catch {
+        setShowtimes([]);
+      }
+    };
+    loadShows();
+  }, [selectedRoom]);
 
   const fetchTickets = async () => {
+    if (!selectedShow) return;
     setLoading(true);
     setApiMissing(false);
     try {
       const data = await getTicketsList(selectedRoom, selectedShow);
       setTickets(data);
     } catch (e) {
-      if (e.message === "API_MISSING") {
+      if (e.message === "API_MISSING" || (e.response && e.response.status === 404)) {
         setApiMissing(true);
         setTickets([]);
       } else {
@@ -31,134 +50,146 @@ export default function Tickets() {
     fetchTickets();
   }, [selectedRoom, selectedShow]);
 
+  const filteredTickets = useMemo(() => {
+    return tickets.filter(t => {
+      const matchesSearch = (t.ticket_id && t.ticket_id.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                            (t.seat_id && t.seat_id.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesStatus = statusFilter === 'all' || statusFilter === 'valid';
+      return matchesSearch && matchesStatus;
+    });
+  }, [tickets, searchQuery, statusFilter]);
+
   return (
-    <div className="soc-container">
-      {/* KHUNG XƯƠNG: THANH TRÊN CÙNG */}
-      <header className="soc-header" style={{ paddingBottom: 12, borderBottom: 'none' }}>
+    <div className="soc-container" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <header className="soc-header" style={{ paddingBottom: 12, borderBottom: 'none', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <input type="text" placeholder="Tìm kiếm mã vé..." className="soc-input" style={{ width: 250 }} />
+          <div className="soc-brand" style={{ color: 'var(--brand-blue)' }}>DANH SÁCH VÉ</div>
         </div>
-        <div className="soc-clock" style={{ fontSize: 16 }}>ĐỐI CHIẾU DỮ LIỆU VÉ</div>
+        <div className="soc-clock" style={{ fontSize: 16 }}>QUẢN LÝ VÉ ĐỒNG BỘ</div>
         <div className="soc-status">
           <span className="status-indicator online"></span>
           MOBILE APP: SẴN SÀNG
         </div>
       </header>
 
-      {/* KHUNG XƯƠNG: NỬA TRÊN (Chia 6.5 / 3.5) */}
-      <div style={{ display: 'flex', gap: 16, height: 160 }}>
-        {/* CỘT TRÁI: BẢNG ĐIỀU KHIỂN CHÍNH */}
-        <div className="soc-panel" style={{ flex: 6.5, display: 'flex', flexDirection: 'column' }}>
-          <div className="panel-title">BẢNG ĐIỀU KHIỂN ĐỒNG BỘ</div>
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Phòng chiếu</label>
-                <select value={selectedRoom} onChange={e => setSelectedRoom(e.target.value)} className="soc-input">
-                  <option value="room1">IMAX (room1)</option>
-                  <option value="room2">2D (room2)</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Suất chiếu</label>
-                <select value={selectedShow} onChange={e => setSelectedShow(e.target.value)} className="soc-input">
-                  <option value="2026-09-29T19:30">2026-09-29 19:30</option>
-                  <option value="2026-10-05T19:30">2026-10-05 19:30</option>
-                  <option value="2026-10-05T21:00">2026-10-05 21:00</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.5 }}>
-              Trạng thái: <strong style={{ color: '#14C692' }}>Đang kết nối nhận dữ liệu...</strong><br/>
-              Lần đồng bộ cuối: <em>Vừa xong</em>
-            </div>
-          </div>
+      {/* THANH CÔNG CỤ (TÌM KIẾM, LỌC) */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexShrink: 0, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Phòng chiếu</label>
+          <select value={selectedRoom} onChange={e => setSelectedRoom(e.target.value)} className="soc-input" style={{ width: 170 }}>
+            <option value="room1">Phòng chiếu 1</option>
+            <option value="room2">Phòng chiếu 2</option>
+            <option value="room3">Phòng chiếu 3</option>
+            <option value="room4">Phòng chiếu 4</option>
+          </select>
         </div>
-
-        {/* CỘT PHẢI: LIVE FEED NOTIFICATIONS */}
-        <div className="soc-panel" style={{ flex: 3.5, display: 'flex', flexDirection: 'column' }}>
-          <div className="panel-title">LUỒNG VÉ VỪA QUÉT (LIVE FEED)</div>
-          <div style={{ flex: 1, padding: '8px 12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 13, color: 'var(--text-dim)', fontStyle: 'italic', textAlign: 'center', marginTop: 32 }}>
-              [Chưa có dữ liệu live streaming từ Mobile]
-            </div>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Suất chiếu</label>
+          <select value={selectedShow} onChange={e => setSelectedShow(e.target.value)} className="soc-input" style={{ width: 320 }}>
+            {showtimes.length === 0 ? (
+              <option value="2026-10-17T08:30">08:30 - 10:15 | 2DDUB Crayon Shinchan</option>
+            ) : (
+              showtimes.map(s => (
+                <option key={s.show_id} value={s.show_id}>
+                  {s.start_time} - {s.end_time} ({s.duration_minutes}p) | {s.movie_name}
+                </option>
+              ))
+            )}
+          </select>
         </div>
-      </div>
-
-      {/* KHUNG XƯƠNG: HÀNG 4 THỐNG KÊ */}
-      <div className="soc-panel" style={{ display: 'flex' }}>
-        <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid var(--grid-line)' }}>
-          <div className="stat-label">TỔNG VÉ TẬP A</div>
-          <div className="stat-val" style={{ color: 'var(--text-main)', marginTop: 4 }}>{tickets.length}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Trạng thái AI</label>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="soc-input" style={{ width: 150 }}>
+            <option value="all">Tất cả</option>
+            <option value="valid">Hợp lệ</option>
+            <option value="alert">Có cảnh báo</option>
+          </select>
         </div>
-        <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid var(--grid-line)' }}>
-          <div className="stat-label">VÉ ĐÃ QUÉT (TẬP B)</div>
-          <div className="stat-val" style={{ color: '#14C692', marginTop: 4 }}>0</div>
-        </div>
-        <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid var(--grid-line)' }}>
-          <div className="stat-label">CHƯA QUÉT (TRỐNG)</div>
-          <div className="stat-val alert-amber" style={{ marginTop: 4 }}>0</div>
-        </div>
-        <div style={{ flex: 1, padding: '12px 16px' }}>
-          <div className="stat-label">LỆCH / KHÁCH LẬU</div>
-          <div className="stat-val alert-red" style={{ marginTop: 4 }}>0</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 200 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Tìm kiếm vé/ghế</label>
+          <input 
+            type="text" 
+            placeholder="Nhập mã vé hoặc mã ghế..." 
+            className="soc-input" 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
         </div>
       </div>
 
-      {/* BẢNG DỮ LIỆU CHI TIẾT */}
-      <div className="soc-panel soc-feed">
-        <div className="panel-title">DANH SÁCH CHI TIẾT TỪNG VÉ</div>
-        <div className="table-wrapper">
-          <table className="soc-table">
-            <thead>
-              <tr>
-                <th>Mã Vé (Ticket ID)</th>
-                <th>Mã Ghế (Seat ID)</th>
-                <th>Trạng Thái Quét</th>
-                <th>Thời Gian Quét (Mobile)</th>
-                <th className="align-right">Trạng Thái Chỗ Ngồi (AI)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {apiMissing ? (
-                <tr>
-                  <td colSpan="5" className="empty-state">
-                    <div style={{ fontSize: 32, marginBottom: 12 }}>🔌</div>
-                    <div style={{ color: 'var(--text-main)', fontWeight: 600, marginBottom: 4 }}>CHƯA KẾT NỐI API BACKEND</div>
-                    <div>Tính năng Danh sách Vé yêu cầu API GET /api/v1/tickets.</div>
-                    <div>Vui lòng yêu cầu bộ phận kỹ thuật hoàn thiện Backend để hiển thị danh sách tại đây.</div>
-                  </td>
-                </tr>
-              ) : tickets.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="empty-state">Không có vé nào trong suất chiếu này.</td>
-                </tr>
-              ) : tickets.map((t, i) => (
-                <tr key={`${t.ticket_id}-${i}`}>
-                  <td className="mono font-bold">{t.ticket_id}</td>
-                  <td className="mono">{t.seat_id}</td>
-                  <td>
-                    <span style={{ 
-                      padding: '4px 8px', 
-                      borderRadius: '4px', 
-                      backgroundColor: 'rgba(20, 198, 146, 0.1)', 
-                      color: '#14C692',
-                      fontSize: '12px',
-                      fontWeight: '600'
-                    }}>
-                      Hợp lệ
-                    </span>
-                  </td>
-                  <td className="mono" style={{ color: 'var(--text-dim)' }}>--</td>
-                  <td className="align-right" style={{ color: 'var(--text-dim)' }}>--</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* THANH CHỈ SỐ GỌN NGÀNG */}
+      <div className="soc-panel" style={{ display: 'flex', flexWrap: 'wrap', flexShrink: 0, marginBottom: 16 }}>
+        <div style={{ flex: '1 1 200px', padding: '12px 16px', borderRight: '1px solid var(--grid-line)' }}>
+          <div className="stat-label">VÉ ĐÃ ĐỒNG BỘ (ĐÃ QUÉT)</div>
+          <div className="stat-val" style={{ color: '#14C692', marginTop: 4, fontFamily: "'JetBrains Mono', monospace" }}>{tickets.length}</div>
         </div>
+        <div style={{ flex: '1 1 200px', padding: '12px 16px' }}>
+          <div className="stat-label">LỆCH SO VỚI CAMERA</div>
+          <div className="stat-val" style={{ color: 'var(--text-dim)', marginTop: 4, fontFamily: "'JetBrains Mono', monospace" }}>-</div>
+        </div>
+      </div>
+
+      <div className="soc-panel soc-feed" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <div className="panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <span>DANH SÁCH CHI TIẾT TỪNG VÉ</span>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 'normal', textTransform: 'none' }}>
+            Hiển thị {filteredTickets.length} / {tickets.length} vé
+          </span>
+        </div>
+        
+        {loading ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>
+            Đang tải dữ liệu...
+          </div>
+        ) : apiMissing ? (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+            <div style={{ color: 'var(--text-main)', fontWeight: 600, marginBottom: 4 }}>CHƯA KẾT NỐI API BACKEND</div>
+            <div style={{ color: 'var(--text-dim)' }}>Tính năng Danh sách Vé yêu cầu API GET /api/v1/tickets.</div>
+          </div>
+        ) : (
+          <div className="table-wrapper" style={{ flex: 1, overflowY: 'auto' }}>
+            <table className="soc-table">
+              <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 1, boxShadow: '0 1px 0 var(--grid-line)' }}>
+                <tr>
+                  <th>Mã Vé (Ticket ID)</th>
+                  <th>Mã Ghế (Seat ID)</th>
+                  <th>Trạng Thái Quét</th>
+                  <th className="align-right">Thời Gian Quét (Mobile)</th>
+                  <th className="align-right">Trạng Thái AI</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTickets.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="empty-state" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-dim)' }}>
+                      {tickets.length === 0 ? "Chưa có vé nào được đồng bộ cho suất này. Quét vé trên app rồi quay lại." : "Không tìm thấy vé nào phù hợp với bộ lọc."}
+                    </td>
+                  </tr>
+                ) : filteredTickets.map((t, i) => (
+                  <tr key={`${t.ticket_id}-${i}`}>
+                    <td className="mono font-bold" style={{ whiteSpace: 'nowrap' }}>{t.ticket_id}</td>
+                    <td className="mono" style={{ whiteSpace: 'nowrap' }}>{t.seat_id}</td>
+                    <td>
+                      <span style={{ 
+                        padding: '4px 8px', 
+                        borderRadius: '4px', 
+                        backgroundColor: 'rgba(20, 198, 146, 0.1)', 
+                        color: '#14C692',
+                        fontSize: '12px',
+                        fontWeight: '600'
+                      }}>
+                        Đã quét
+                      </span>
+                    </td>
+                    <td className="mono align-right" style={{ color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>--</td>
+                    <td className="align-right" style={{ color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>--</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

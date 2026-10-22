@@ -3,15 +3,23 @@ venv/
 env/
 __pycache__/
 
-# Dữ liệu ảnh và mô hình AI (Không đẩy lên Github vì quá nặng)
-datasets/images/
-datasets/labels/
+# Dữ liệu ảnh và mô hình AI (Không đẩy lên Github)
+data_raw/
+datasets/
+datasets_archive/
 runs/
+runs_archive/
+models/
+reports/*.log
 *.pt
+*.cache
+*.mp4
+*.avi
+*.mov
+*.mkv
 
 # Biến môi trường
 .env
-
 
 # Temporary files and db
 cinesight.db
@@ -19,4 +27,5 @@ ram_log_*.txt
 *.jpg
 ram_test.ps1
 test_db.py
+
 

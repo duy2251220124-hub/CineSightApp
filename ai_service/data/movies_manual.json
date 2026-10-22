@@ -1,0 +1,82 @@
+[
+  {
+    "title_vi": "Kẻ Hủy Diệt 2: Ngày Phán Xét",
+    "title_original": "Terminator 2: Judgment Day",
+    "release_date": "1991-07-03",
+    "release_date_source": "manual",
+    "runtime_min": 137,
+    "poster_path": "/5M0j0B18abtBI5a4LgvfdApUtFz.jpg",
+    "backdrop_path": "/1Lh9LENDaTycBiAzyBKi5vV4e49.jpg",
+    "popularity": 85.0
+  },
+  {
+    "title_vi": "Vùng Đất Linh Hồn",
+    "title_original": "Spirited Away (Sen to Chihiro no Kamikakushi)",
+    "release_date": "2001-07-20",
+    "release_date_source": "manual",
+    "runtime_min": 125,
+    "poster_path": "/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg",
+    "backdrop_path": "/Ab8mkHmkYADjU7wQiOkia9BzGvS.jpg",
+    "popularity": 95.0
+  },
+  {
+    "title_vi": "Kỵ Sĩ Bóng Đêm",
+    "title_original": "The Dark Knight",
+    "release_date": "2008-07-18",
+    "release_date_source": "manual",
+    "runtime_min": 152,
+    "poster_path": "/qJ2tW6WMUDux911r6m7haRef0WH.jpg",
+    "backdrop_path": "/nMKdUUepR0i5zn0y1T4CsSB5chy.jpg",
+    "popularity": 98.0
+  },
+  {
+    "title_vi": "Kẻ Đánh Cắp Giấc Mơ",
+    "title_original": "Inception",
+    "release_date": "2010-07-16",
+    "release_date_source": "manual",
+    "runtime_min": 148,
+    "poster_path": "/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg",
+    "backdrop_path": "/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg",
+    "popularity": 92.0
+  },
+  {
+    "title_vi": "Ám Ảnh Kinh Hoàng",
+    "title_original": "The Conjuring",
+    "release_date": "2013-07-19",
+    "release_date_source": "manual",
+    "runtime_min": 112,
+    "poster_path": "/wVYREutTvI2tmxr6ujrHT704wGF.jpg",
+    "backdrop_path": "/m1g0oN709gG55B464FvM7018h9x.jpg",
+    "popularity": 80.0
+  },
+  {
+    "title_vi": "Hố Đen Tử Thần",
+    "title_original": "Interstellar",
+    "release_date": "2014-11-07",
+    "release_date_source": "manual",
+    "runtime_min": 169,
+    "poster_path": "/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg",
+    "backdrop_path": "/xJHokMbljvjADYdit5fK5VQsXEG.jpg",
+    "popularity": 90.0
+  },
+  {
+    "title_vi": "Những Kẻ Khờ Mộng Mơ",
+    "title_original": "La La Land",
+    "release_date": "2016-12-09",
+    "release_date_source": "manual",
+    "runtime_min": 128,
+    "poster_path": "/uDO8zWDhfWwoFdKS4fzkVJb0Rf0.jpg",
+    "backdrop_path": "/qJeU79fBnGdp0qD8n9p5m6r5m7b.jpg",
+    "popularity": 75.0
+  },
+  {
+    "title_vi": "Ký Sinh Trùng",
+    "title_original": "Parasite (Gisaengchung)",
+    "release_date": "2019-05-30",
+    "release_date_source": "manual",
+    "runtime_min": 132,
+    "poster_path": "/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg",
+    "backdrop_path": "/hiKmpZMGZsrkA3cdce8a7Dpos1j.jpg",
+    "popularity": 88.0
+  }
+]

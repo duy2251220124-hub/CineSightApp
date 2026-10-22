@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAlertHistory } from '../api/cineSightApi';
+import { getAlertHistory, resolveAlert } from '../api/cineSightApi';
 import '../styles/dashboard.css';
 
 export default function Alerts() {
@@ -28,6 +28,15 @@ export default function Alerts() {
     setLoading(false);
   };
 
+  const handleResolveAlert = async (alertId) => {
+    try {
+      await resolveAlert(alertId);
+      await fetchHistory();
+    } catch (e) {
+      alert("Lỗi khi xử lý sự cố: " + e.message);
+    }
+  };
+
   useEffect(() => {
     fetchHistory();
   }, [filterRoom, filterType, filterStatus]);
@@ -41,8 +50,10 @@ export default function Alerts() {
           <label style={{ fontSize: 13, color: 'var(--text-dim)' }}>Phòng:</label>
           <select value={filterRoom} onChange={e => setFilterRoom(e.target.value)} className="soc-input">
             <option value="ALL">Tất cả phòng</option>
-            <option value="room1">IMAX (room1)</option>
-            <option value="room2">2D (room2)</option>
+            <option value="room1">Phòng chiếu 1</option>
+            <option value="room2">Phòng chiếu 2</option>
+            <option value="room3">Phòng chiếu 3</option>
+            <option value="room4">Phòng chiếu 4</option>
           </select>
           
           <span style={{ width: 16 }}></span>
@@ -53,6 +64,7 @@ export default function Alerts() {
             <option value="illegal_occupant">Khách lậu (Đỏ)</option>
             <option value="missing_guest">Vắng mặt (Vàng)</option>
             <option value="over_capacity">Vượt tải (Đỏ)</option>
+            <option value="damaged_seat">Ghế hư hỏng (Xanh)</option>
           </select>
           
           <span style={{ width: 16 }}></span>
@@ -60,8 +72,8 @@ export default function Alerts() {
           <label style={{ fontSize: 13, color: 'var(--text-dim)' }}>Trạng thái:</label>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="soc-input">
             <option value="ALL">Tất cả trạng thái</option>
-            <option value="active">⏳ Đang chờ xử lý</option>
-            <option value="resolved">✅ Đã xử lý</option>
+            <option value="active">Đang chờ xử lý</option>
+            <option value="resolved">Đã xử lý</option>
           </select>
           
           <div style={{ flex: 1 }}></div>
@@ -92,7 +104,6 @@ export default function Alerts() {
               {apiMissing ? (
                 <tr>
                   <td colSpan="7" className="empty-state">
-                    <div style={{ fontSize: 32, marginBottom: 12 }}>🔌</div>
                     <div style={{ color: 'var(--text-main)', fontWeight: 600, marginBottom: 4 }}>CHƯA KẾT NỐI API BACKEND</div>
                     <div>Tính năng Lịch sử Cảnh báo yêu cầu API GET /api/v1/alerts/history.</div>
                     <div>Vui lòng yêu cầu bộ phận kỹ thuật hoàn thiện Backend.</div>
@@ -119,6 +130,12 @@ export default function Alerts() {
                   icon = (
                     <svg viewBox="0 0 24 24"><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
                   );
+                } else if (a.alert_type === 'damaged_seat') {
+                  rowClass = 'row-warning'; 
+                  label = 'Ghế hư hỏng';
+                  icon = (
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 18v3h3v-3h10v3h3v-6H4v3zm15-8h3v3h-3v-3zM2 10h3v3H2v-3zm15 3H7V5c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2v8z"/></svg>
+                  );
                 } else {
                   rowClass = 'row-warning'; 
                   label = 'Trống ghế';
@@ -127,24 +144,30 @@ export default function Alerts() {
                   );
                 }
 
+                const roomDisplayName = a.room_id === 'room1' ? 'Phòng chiếu 1' : a.room_id === 'room2' ? 'Phòng chiếu 2' : a.room_id === 'room3' ? 'Phòng chiếu 3' : a.room_id === 'room4' ? 'Phòng chiếu 4' : a.room_id;
+
                 return (
                   <tr key={a.id} className={rowClass}>
                     <td className="mono">{new Date(a.timestamp).toLocaleString('vi-VN')}</td>
                     <td className="mono">{a.show_id}</td>
-                    <td>{a.room_id}</td>
+                    <td>{roomDisplayName}</td>
                     <td className="mono font-bold">{a.seat_id || 'N/A'}</td>
                     <td className="issue-cell">
                       <span className="issue-icon">{icon}</span> {label}
                     </td>
                     <td>
                       {a.resolved ? (
-                        <span style={{ color: '#14C692', fontWeight: 600 }}>✅ Đã xử lý</span>
+                        <span style={{ color: '#14C692', fontWeight: 600 }}>Đã xử lý</span>
                       ) : (
-                        <span style={{ color: 'var(--alert-amber)', fontWeight: 600 }}>⏳ Chờ xử lý</span>
+                        <span style={{ color: 'var(--alert-amber)', fontWeight: 600 }}>Chờ xử lý</span>
                       )}
                     </td>
                     <td className="align-right">
-                      <button className="soc-btn action-btn" disabled={a.resolved}>
+                      <button 
+                        className="soc-btn action-btn" 
+                        disabled={a.resolved}
+                        onClick={() => handleResolveAlert(a.id)}
+                      >
                         {a.resolved ? 'Đã xong' : 'Xử lý ngay'}
                       </button>
                     </td>

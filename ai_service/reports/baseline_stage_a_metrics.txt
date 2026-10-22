@@ -1,0 +1,7 @@
+=== BASELINE MODEL METRICS (STAGE A - 50 EPOCHS - IMGSZ 800) ===
+Training Time: 71.43 mins
+Precision: 0.9190
+Recall: 0.7273
+mAP@50: 0.7872
+mAP@50-95: 0.2633
+Weights file: c:\CineSightApp\ai_service\models\baseline_stage_a.pt

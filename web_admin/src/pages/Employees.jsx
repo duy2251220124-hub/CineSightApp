@@ -8,14 +8,12 @@ export default function Employees() {
   const [empUsername, setEmpUsername] = useState('');
   const [empPassword, setEmpPassword] = useState('');
   const [empRole, setEmpRole] = useState('Dọn rạp');
+  const [empShift, setEmpShift] = useState('ca_sang');
   const [empLoading, setEmpLoading] = useState(false);
   
   // Edit state
   const [editingId, setEditingId] = useState(null);
-  const [editData, setEditData] = useState({ username: '', password: '', name: '', role: '' });
-  
-  // View password state
-  const [visiblePasswords, setVisiblePasswords] = useState({}); // { empId: boolean }
+  const [editData, setEditData] = useState({ username: '', password: '', name: '', role: '', shift: '' });
 
   const fetchInitialData = async () => {
     try {
@@ -35,10 +33,11 @@ export default function Employees() {
     if (!empName.trim() || !empUsername.trim() || !empPassword.trim()) return;
     setEmpLoading(true);
     try {
-      await addEmployee(empUsername.trim(), empPassword.trim(), empName.trim(), empRole);
+      await addEmployee(empUsername.trim(), empPassword.trim(), empName.trim(), empRole, empShift || null);
       setEmpName('');
       setEmpUsername('');
       setEmpPassword('');
+      setEmpShift('ca_sang');
       const emps = await getEmployees();
       setEmployees(emps);
     } catch (e) {
@@ -64,17 +63,25 @@ export default function Employees() {
     setEditingId(emp.id);
     setEditData({
       username: emp.username,
-      password: emp.password,
+      password: '',
       name: emp.name,
-      role: emp.role
+      role: emp.role,
+      shift: emp.shift || ''
     });
   };
 
   const handleSaveEdit = async () => {
-    if (!editData.username.trim() || !editData.password.trim() || !editData.name.trim()) return;
+    if (!editData.username.trim() || !editData.name.trim()) return;
     setEmpLoading(true);
     try {
-      await updateEmployee(editingId, editData.username.trim(), editData.password.trim(), editData.name.trim(), editData.role);
+      await updateEmployee(
+        editingId, 
+        editData.username.trim(), 
+        editData.password.trim(), 
+        editData.name.trim(), 
+        editData.role,
+        editData.shift || null
+      );
       setEditingId(null);
       const emps = await getEmployees();
       setEmployees(emps);
@@ -83,12 +90,11 @@ export default function Employees() {
     }
     setEmpLoading(false);
   };
-  
-  const togglePasswordVisibility = (id) => {
-    setVisiblePasswords(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+
+  const getShiftBadge = (shift) => {
+    if (shift === 'ca_sang') return <span style={{ color: '#2563EB', fontWeight: 600 }}>Ca sáng (08:00 - 16:00)</span>;
+    if (shift === 'ca_toi') return <span style={{ color: '#7C3AED', fontWeight: 600 }}>Ca tối (16:00 - 24:00)</span>;
+    return <span style={{ color: 'var(--text-dim)' }}>Chưa phân ca</span>;
   };
 
   return (
@@ -113,13 +119,14 @@ export default function Employees() {
                   <th>Mật khẩu</th>
                   <th>Họ Tên</th>
                   <th>Vai trò</th>
+                  <th>Ca trực</th>
                   <th className="align-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {employees.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="empty-state">Chưa có nhân viên nào.</td>
+                    <td colSpan="7" className="empty-state">Chưa có nhân viên nào.</td>
                   </tr>
                 ) : employees.map(emp => {
                   const isEditing = editingId === emp.id;
@@ -146,26 +153,17 @@ export default function Employees() {
                     <td>
                       {isEditing ? (
                         <input 
-                          type="text" 
+                          type="password" 
                           className="soc-input mono"
+                          placeholder="(Để trống nếu không đổi)"
                           value={editData.password}
                           onChange={e => setEditData({...editData, password: e.target.value})}
-                          style={{ padding: '4px 8px', minWidth: 100 }}
+                          style={{ padding: '4px 8px', minWidth: 150 }}
                         />
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span className="mono" style={{ color: 'var(--text-dim)' }}>
-                            {visiblePasswords[emp.id] ? emp.password : '••••••••'}
-                          </span>
-                          <button 
-                            className="soc-btn" 
-                            style={{ padding: '2px 6px', fontSize: 10, minWidth: 'auto', backgroundColor: 'transparent' }}
-                            onClick={() => togglePasswordVisibility(emp.id)}
-                            title={visiblePasswords[emp.id] ? "Ẩn" : "Hiện"}
-                          >
-                            {visiblePasswords[emp.id] ? "ẨN" : "HIỆN"}
-                          </button>
-                        </div>
+                        <span className="mono" style={{ color: 'var(--text-dim)' }}>
+                          ••••••••
+                        </span>
                       )}
                     </td>
 
@@ -206,6 +204,24 @@ export default function Employees() {
                         }}>
                           {emp.role}
                         </span>
+                      )}
+                    </td>
+
+                    {/* Shift Column */}
+                    <td>
+                      {isEditing ? (
+                        <select 
+                          className="soc-input" 
+                          value={editData.shift}
+                          onChange={e => setEditData({...editData, shift: e.target.value})}
+                          style={{ padding: '4px 8px' }}
+                        >
+                          <option value="">Chưa phân ca</option>
+                          <option value="ca_sang">Ca sáng (08:00 - 16:00)</option>
+                          <option value="ca_toi">Ca tối (16:00 - 24:00)</option>
+                        </select>
+                      ) : (
+                        getShiftBadge(emp.shift)
                       )}
                     </td>
 
@@ -294,6 +310,16 @@ export default function Employees() {
               >
                 <option value="Dọn rạp">Dọn rạp</option>
                 <option value="Soát vé">Soát vé</option>
+              </select>
+              <select 
+                className="soc-input" 
+                style={{ flex: 1, minWidth: 160 }}
+                value={empShift}
+                onChange={e => setEmpShift(e.target.value)}
+              >
+                <option value="ca_sang">Ca sáng (08:00 - 16:00)</option>
+                <option value="ca_toi">Ca tối (16:00 - 24:00)</option>
+                <option value="">Chưa phân ca</option>
               </select>
               <button 
                 type="submit" 

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Tiện ích tạo show_id chuẩn để dùng chung giữa
 /// màn hình chọn suất chiếu, ScannerScreen và ApiClient.
 ///
@@ -10,4 +12,25 @@ String toShowId(String date, String timeRange) {
   final h = int.parse(parts[0]).toString().padLeft(2, '0');
   final m = int.parse(parts[1]).toString().padLeft(2, '0');
   return '${date}T$h:$m';
+}
+
+/// Trạng thái suất chiếu đang được chọn toàn cục trong ứng dụng
+class CSActiveShowtime {
+  static final ValueNotifier<Map<String, String>> notifier = ValueNotifier({
+    'roomId': 'room1',
+    'showId': '2026-10-21T20:10',
+    'movieTitle': 'Ngọn Đồi Hoa Hồng Anh',
+  });
+
+  static String get roomId => notifier.value['roomId'] ?? 'room1';
+  static String get showId => notifier.value['showId'] ?? '2026-10-21T20:10';
+  static String get movieTitle => notifier.value['movieTitle'] ?? 'Ngọn Đồi Hoa Hồng Anh';
+
+  static void update({required String roomId, required String showId, String? movieTitle}) {
+    notifier.value = {
+      'roomId': roomId,
+      'showId': showId,
+      'movieTitle': movieTitle ?? '',
+    };
+  }
 }

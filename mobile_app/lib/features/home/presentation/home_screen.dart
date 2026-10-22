@@ -1,24 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/core/utils/show_id_utils.dart';
 
-import '../../../theme/app_theme.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 import '../../scanner/presentation/scanner_screen.dart';
-import '../../../screens/cs_home_screen.dart';
-import '../../../screens/cs_warning_screen.dart';
-import '../../../screens/cs_warning_detail_screen.dart';
-import '../../../widgets/cs_bottom_nav.dart';
-import '../../../screens/cs_showtimes_screen.dart';
-import '../../../screens/cs_rooms_screen.dart';
-import '../../../screens/cs_handover_screen.dart';
-import '../../../screens/cs_notification_screen.dart';
-import '../../../screens/cs_settings_screen.dart';
-import '../../../screens/cs_seat_map_screen.dart';
-import '../../../screens/cs_damaged_seat_screen.dart';
-import '../../../screens/cs_add_incident_screen.dart';
-
-import '../../../screens/cs_offline_screen.dart';
-import '../../../screens/cs_login_screen.dart';
-import '../../../mock/mock_data.dart';
-import '../../../core/utils/show_id_utils.dart';
+import 'package:mobile_app/features/home/presentation/cs_home_screen.dart';
+import 'package:mobile_app/features/alerts/presentation/cs_warning_screen.dart';
+import 'package:mobile_app/features/alerts/presentation/cs_warning_detail_screen.dart';
+import 'package:mobile_app/core/widgets/cs_bottom_nav.dart';
+import 'package:mobile_app/features/rooms/presentation/cs_showtimes_screen.dart';
+import 'package:mobile_app/features/rooms/presentation/cs_rooms_screen.dart';
+import 'package:mobile_app/features/alerts/presentation/cs_handover_screen.dart';
+import 'package:mobile_app/features/notifications/presentation/cs_notification_screen.dart';
+import 'package:mobile_app/features/settings/presentation/cs_settings_screen.dart';
+import 'package:mobile_app/features/rooms/presentation/cs_seat_map_screen.dart';
+import 'package:mobile_app/features/alerts/presentation/cs_damaged_seat_screen.dart';
+import 'package:mobile_app/features/alerts/presentation/cs_add_incident_screen.dart';
+import 'package:mobile_app/core/network/presentation/cs_offline_screen.dart';
+import 'package:mobile_app/features/auth/presentation/cs_login_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -30,10 +29,10 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
 
-  CSMockMovie _selectedMovie = CSMockData.movies.first;
-
-  String get _currentShowId =>
-      toShowId(_selectedMovie.date, _selectedMovie.time);
+  late final Map<String, dynamic> _selectedShowtime = {
+    'roomId': CSActiveShowtime.roomId,
+    'showId': CSActiveShowtime.showId,
+  };
 
   final List<GlobalKey<NavigatorState>> _navigatorKeys = [
     GlobalKey<NavigatorState>(),
@@ -55,7 +54,6 @@ class _HomeShellState extends State<HomeShell> {
     return true; 
   }
 
-  /// Bấm tab khác -> chuyển tab. Bấm lại tab đang mở -> quay về màn gốc của tab.
   void _onTabTapped(int index) {
     if (index == _currentIndex) {
       _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
@@ -79,22 +77,41 @@ class _HomeShellState extends State<HomeShell> {
               key: _navigatorKeys[0],
               onGenerateRoute: (settings) => MaterialPageRoute(
                 builder: (navCtx) => CSHomeScreen(
-                  onShowtimes: () {
-                    Navigator.push(navCtx, MaterialPageRoute(
+                  onShowtimes: () async {
+                    await Navigator.push(navCtx, MaterialPageRoute(
                       builder: (ctx) => CSShowtimesScreen(
                         onMovieSelected: (movie) {
-                          setState(() => _selectedMovie = movie);
+                          final showId = (movie['show_id'] ?? movie['id'] ?? _selectedShowtime['showId']).toString();
+                          final roomId = movie['room_id'] != null
+                              ? movie['room_id'].toString().replaceAll('seats_config_', '')
+                              : _selectedShowtime['roomId'];
+                          final movieTitle = movie['movie_name']?.toString() ?? movie['title']?.toString() ?? '';
+
+                          setState(() {
+                            _selectedShowtime['showId'] = showId;
+                            _selectedShowtime['roomId'] = roomId;
+                          });
+                          CSActiveShowtime.update(
+                            roomId: roomId,
+                            showId: showId,
+                            movieTitle: movieTitle,
+                          );
                           Navigator.pop(ctx);
                         },
                       ),
                     ));
                   },
-                  onRooms: () {
-                    Navigator.push(navCtx, MaterialPageRoute(
+                  onRooms: () async {
+                    await Navigator.push(navCtx, MaterialPageRoute(
                       builder: (ctx) => CSRoomsScreen(
                         onConfirmed: (room) {
+                          setState(() {
+                            _selectedShowtime['roomId'] = room['room_id'] ?? 'room1';
+                          });
                           Navigator.push(ctx, MaterialPageRoute(
                             builder: (ctx2) => CSSeatMapScreen(
+                              roomId: _selectedShowtime['roomId'],
+                              showId: _selectedShowtime['showId'],
                               onReportDamagedSeat: () {
                                 Navigator.push(ctx2, MaterialPageRoute(
                                   builder: (ctx3) => CSDamagedSeatScreen(
@@ -102,10 +119,9 @@ class _HomeShellState extends State<HomeShell> {
                                       Navigator.push(ctx3, MaterialPageRoute(
                                         builder: (ctx4) => CSAddIncidentScreen(
                                           reportedSeats: seats,
-                                          // Tạo xong: quay về Sơ đồ ghế để thấy ghế vừa báo hư (màu cam).
-                                          onSubmit: () => Navigator.of(ctx4)
-                                            ..pop()
-                                            ..pop(),
+                                          roomId: _selectedShowtime['roomId'],
+                                          showId: _selectedShowtime['showId'],
+                                          initialCategory: 'seat_damage',
                                         ),
                                       ));
                                     },
@@ -118,15 +134,15 @@ class _HomeShellState extends State<HomeShell> {
                       ),
                     ));
                   },
-                  onHandover: () {
-                    Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSHandoverScreen()));
+                  onHandover: () async {
+                    await Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSHandoverScreen()));
                   },
-                  onNotifications: (bellCtx) {
-                    showCSNotificationPopover(
+                  onNotifications: (bellCtx) async {
+                    await showCSNotificationPopover(
                       navCtx,
                       anchorContext: bellCtx,
-                      onViewAll: () {
-                        Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSNotificationScreen()));
+                      onViewAll: () async {
+                        await Navigator.push(navCtx, MaterialPageRoute(builder: (_) => const CSNotificationScreen()));
                       },
                     );
                   },
@@ -138,7 +154,16 @@ class _HomeShellState extends State<HomeShell> {
             Navigator(
               key: _navigatorKeys[1],
               onGenerateRoute: (settings) => MaterialPageRoute(
-                builder: (navCtx) => ScannerScreen(roomId: _selectedMovie.roomId, showId: _currentShowId)
+                builder: (navCtx) => ScannerScreen(
+                  roomId: _selectedShowtime['roomId'],
+                  showId: _selectedShowtime['showId'],
+                  onShowtimeChanged: (rId, sId) {
+                    setState(() {
+                      _selectedShowtime['roomId'] = rId;
+                      _selectedShowtime['showId'] = sId;
+                    });
+                  },
+                )
               )
             ),
 
@@ -150,6 +175,7 @@ class _HomeShellState extends State<HomeShell> {
                   onWarningSelected: (warning) {
                     Navigator.push(navCtx, MaterialPageRoute(
                       builder: (ctx) => CSWarningDetailScreen(
+                        alertId: warning['id'] ?? 1,
                         onResolved: () => Navigator.pop(ctx),
                       ),
                     ));
@@ -175,7 +201,21 @@ class _HomeShellState extends State<HomeShell> {
                     ));
                   },
                   onLogout: () {
-                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CSLoginScreen()));
+                    ApiClient.currentUser = null;
+                    Navigator.pushAndRemoveUntil(
+                      context, 
+                      MaterialPageRoute(builder: (_) => Builder(
+                        builder: (ctx) => CSLoginScreen(
+                          onLogin: () {
+                            Navigator.pushReplacement(
+                              ctx,
+                              MaterialPageRoute(builder: (_) => const HomeShell()),
+                            );
+                          },
+                        ),
+                      )),
+                      (route) => false,
+                    );
                   },
                 )
               )

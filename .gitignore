@@ -8,5 +8,16 @@ ngrok_bin/
 *.db
 *.pt
 *.engine
+*.cache
+*.mp4
+*.avi
+*.mov
+*.mkv
+data_raw/
+datasets/
+models/
+runs/
+reports/*.log
 tools/qr_samples/
 mobile_app/test_hive_dir/
+
