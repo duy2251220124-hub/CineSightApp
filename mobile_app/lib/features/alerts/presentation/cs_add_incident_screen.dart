@@ -119,7 +119,7 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                     children: [
                       const CSFormLabel('LOẠI SỰ CỐ'),
                       DropdownButtonFormField<String>(
-                        value: _category,
+                        initialValue: _category,
                         items: const [
                           DropdownMenuItem(value: 'seat_damage', child: Text('Ghế hỏng')),
                           DropdownMenuItem(value: 'equipment', child: Text('Lỗi thiết bị (máy chiếu, âm thanh...)')),

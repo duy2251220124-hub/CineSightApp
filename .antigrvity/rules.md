@@ -1,3 +1,0 @@
-- Tuyệt đối KHÔNG dùng lệnh terminal (`python -c`, `powershell`, `Set-Content`) để sửa code hoặc chuẩn hóa CRLF trong các file của dự án.
-- Luôn dùng công cụ chỉnh sửa file trực tiếp (native file edit tool).
-- Không tạo thư mục hoặc ghi file ra ngoài thư mục gốc `C:\CineSightApp`.

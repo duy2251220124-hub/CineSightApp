@@ -50,8 +50,8 @@ class _CSHomeScreenState extends State<CSHomeScreen> with SingleTickerProviderSt
     final incidentsFuture = ApiClient.getIncidents(status: 'open', limit: 50);
 
     final results = await Future.wait([alertsFuture, incidentsFuture]);
-    final alerts = results[0] as List<dynamic>;
-    final incidents = results[1] as List<dynamic>;
+    final alerts = results[0];
+    final incidents = results[1];
 
     final unreadCount = alerts.length + incidents.length;
 

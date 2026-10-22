@@ -70,7 +70,7 @@ class _CSNotificationPopover extends StatefulWidget {
 
 class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
   List<dynamic> _alerts = [];
-  bool _loading = true;
+  // state
 
   @override
   void initState() {
@@ -83,8 +83,8 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
     final incidentsFuture = ApiClient.getIncidents(limit: 50);
 
     final results = await Future.wait([alertsFuture, incidentsFuture]);
-    final alerts = results[0] as List<dynamic>;
-    final incidents = results[1] as List<dynamic>;
+    final alerts = results[0];
+    final incidents = results[1];
 
     final combined = <dynamic>[...alerts, ...incidents];
     
@@ -98,7 +98,7 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
     if (mounted) {
       setState(() {
         _alerts = combined;
-        _loading = false;
+        // loaded
       });
     }
   }
@@ -234,7 +234,7 @@ class CSNotificationScreen extends StatefulWidget {
 
 class _CSNotificationScreenState extends State<CSNotificationScreen> {
   List<dynamic> _alerts = [];
-  bool _loading = true;
+  // state
 
   @override
   void initState() {
@@ -247,8 +247,8 @@ class _CSNotificationScreenState extends State<CSNotificationScreen> {
     final incidentsFuture = ApiClient.getIncidents(limit: 50);
 
     final results = await Future.wait([alertsFuture, incidentsFuture]);
-    final alerts = results[0] as List<dynamic>;
-    final incidents = results[1] as List<dynamic>;
+    final alerts = results[0];
+    final incidents = results[1];
 
     final combined = <dynamic>[...alerts, ...incidents];
     
@@ -262,7 +262,7 @@ class _CSNotificationScreenState extends State<CSNotificationScreen> {
     if (mounted) {
       setState(() {
         _alerts = combined;
-        _loading = false;
+        // loaded
       });
     }
   }

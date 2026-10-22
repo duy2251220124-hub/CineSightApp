@@ -174,7 +174,7 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 itemCount: roomFilters.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                separatorBuilder: (context, index) => const SizedBox(width: 6),
                 itemBuilder: (context, idx) {
                   final f = roomFilters[idx];
                   final isSelected = _selectedRoomFilter == f['id'];
