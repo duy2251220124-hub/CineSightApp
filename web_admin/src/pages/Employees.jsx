@@ -191,6 +191,7 @@ export default function Employees() {
                           onChange={e => setEditData({...editData, role: e.target.value})}
                           style={{ padding: '4px 8px' }}
                         >
+                          <option value="Quản lý">Quản lý</option>
                           <option value="Dọn rạp">Dọn rạp</option>
                           <option value="Soát vé">Soát vé</option>
                         </select>
@@ -308,6 +309,7 @@ export default function Employees() {
                 value={empRole}
                 onChange={e => setEmpRole(e.target.value)}
               >
+                <option value="Quản lý">Quản lý</option>
                 <option value="Dọn rạp">Dọn rạp</option>
                 <option value="Soát vé">Soát vé</option>
               </select>

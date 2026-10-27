@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>CineSight - Lấy dữ liệu phim TMDB (chạy trong trình duyệt)</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 12px; }
+  input, button { font-size: 14px; padding: 6px 10px; margin: 4px 0; }
+  input[type=password] { width: 100%; box-sizing: border-box; }
+  pre { background: #111; color: #9fe; padding: 10px; height: 320px; overflow: auto; white-space: pre-wrap; }
+  .note { background: #fff7d6; border: 1px solid #e0c44c; padding: 8px 12px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<h2>Lấy dữ liệu phim thật từ TMDB (region=VN)</h2>
+<div class="note">
+  Bật Fake IP/VPN trên trình duyệt này trước khi bấm. Khóa chỉ nằm trong bộ nhớ của trang, không được lưu,
+  chỉ gửi tới <code>api.themoviedb.org</code>. Xong hãy đóng tab. Không dán khóa vào chat.
+</div>
+<p>
+  <label>TMDB Read Access Token (hoặc API Key v3):</label>
+  <input id="key" type="password" autocomplete="off" placeholder="Dán khóa vào đây">
+</p>
+<p>
+  Số phim đang chiếu tối đa: <input id="maxNow" type="number" value="10" min="1" max="20" style="width:70px">
+  &nbsp; đã khởi chiếu trong vòng <input id="nowDays" type="number" value="60" style="width:70px"> ngày
+</p>
+<p>
+  Số phim sắp chiếu tối đa: <input id="maxUp" type="number" value="15" min="1" max="20" style="width:70px">
+  &nbsp; khởi chiếu trong <input id="upDays" type="number" value="30" style="width:70px"> ngày tới
+</p>
+<button id="go">Lấy dữ liệu &amp; tải file snapshot</button>
+<pre id="log"></pre>
+<script>
+const API = "https://api.themoviedb.org/3";
+const logEl = document.getElementById("log");
+const log = (m) => { logEl.textContent += m + "\n"; logEl.scrollTop = logEl.scrollHeight; };
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+function makeGet(secret) {
+  const isToken = secret.length > 60;           // Read Access Token là JWT dài; API Key v3 dài 32 ký tự
+  return async function get(path, params) {
+    const q = new URLSearchParams(params || {});
+    const headers = { accept: "application/json" };
+    if (isToken) headers["Authorization"] = "Bearer " + secret; else q.set("api_key", secret);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await sleep(260);                          // ~4 request/giây
+      const res = await fetch(API + path + "?" + q.toString(), { headers });
+      if (res.ok) return res.json();
+      if (res.status === 401 || res.status === 403) throw new Error("HTTP " + res.status + ": khóa bị từ chối");
+      if (res.status === 404) throw new Error("HTTP 404: " + path);
+      if (res.status === 429 || res.status >= 500) { await sleep(1000 * Math.pow(2, attempt)); continue; }
+      throw new Error("HTTP " + res.status + ": " + path);
+    }
+    throw new Error("Thất bại sau nhiều lần thử: " + path);
+  };
+}
+
+function dayDiff(dateStr) {                       // số ngày từ hôm nay đến dateStr (âm = đã qua)
+  const t = new Date(); t.setHours(0,0,0,0);
+  const d = new Date(dateStr + "T00:00:00");
+  return Math.round((d - t) / 86400000);
+}
+
+document.getElementById("go").onclick = async () => {
+  logEl.textContent = "";
+  const secret = document.getElementById("key").value.trim();
+  if (!secret) { log("Chưa nhập khóa."); return; }
+  const maxNow = +document.getElementById("maxNow").value;
+  const maxUp = +document.getElementById("maxUp").value;
+  const nowDays = +document.getElementById("nowDays").value;
+  const upDays = +document.getElementById("upDays").value;
+  const get = makeGet(secret);
+  try {
+    log("Gọi /movie/now_playing (VN, vi-VN)...");
+    const now = await get("/movie/now_playing", { region: "VN", language: "vi-VN", page: 1 });
+    log("  -> " + now.results.length + " phim");
+    log("Gọi /movie/upcoming (VN, vi-VN)...");
+    const up = await get("/movie/upcoming", { region: "VN", language: "vi-VN", page: 1 });
+    log("  -> " + up.results.length + " phim");
+
+    const nowSel = now.results
+      .filter(m => m.release_date && dayDiff(m.release_date) <= 0 && dayDiff(m.release_date) >= -nowDays)
+      .sort((a, b) => b.popularity - a.popularity).slice(0, maxNow);
+    const upSel = up.results
+      .filter(m => m.release_date && dayDiff(m.release_date) > 0 && dayDiff(m.release_date) <= upDays)
+      .sort((a, b) => b.popularity - a.popularity).slice(0, maxUp);
+    log("Sau lọc: " + nowSel.length + " đang chiếu (trong " + nowDays + " ngày), " + upSel.length + " sắp chiếu (trong " + upDays + " ngày tới)");
+
+    const ids = [...new Set([...nowSel, ...upSel].map(m => m.id))];
+    const details = {}, releases = {};
+    for (const id of ids) {
+      log("Chi tiết phim #" + id + "...");
+      details[id] = await get("/movie/" + id, { language: "vi-VN" });
+      releases[id] = await get("/movie/" + id + "/release_dates");
+    }
+
+    const snapshot = {
+      fetched_at: new Date().toISOString(),
+      source: "tmdb_api_v3_browser",
+      region: "VN", language: "vi-VN",
+      now_playing: { results: nowSel },
+      upcoming: { results: upSel },
+      movie_details: details,
+      release_dates: releases
+    };
+    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "tmdb_sync_" + ymd + ".json";
+    a.click();
+    log("\nXONG. Đã tải file tmdb_sync_" + ymd + ".json (" + ids.length + " phim).");
+    log("Chép file vào ai_service\\data_raw\\ rồi báo lại cho trợ lý.");
+  } catch (e) {
+    log("LỖI: " + String(e.message).replace(secret, "***"));
+  }
+};
+</script>
+</body>
+</html>
+

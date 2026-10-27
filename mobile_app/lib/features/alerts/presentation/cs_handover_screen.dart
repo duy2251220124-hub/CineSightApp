@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/network/api_client.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
+import 'package:mobile_app/core/utils/room_utils.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
 import 'package:mobile_app/core/widgets/cs_status_tag.dart';
 import 'cs_add_incident_screen.dart';
@@ -42,11 +43,11 @@ class _CSHandoverScreenState extends State<CSHandoverScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(context, MaterialPageRoute(
-            builder: (_) => CSAddIncidentScreen(
+            builder: (addCtx) => CSAddIncidentScreen(
               reportedSeats: const [],
               onIncidentAdded: () {
                 _loadIncidents();
-                Navigator.pop(context);
+                Navigator.pop(addCtx);
               },
             ),
           ));
@@ -149,7 +150,7 @@ class CSIncidentCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Phòng: ${incident['room_id'] ?? 'N/A'} - Suất: ${incident['show_id'] ?? 'N/A'}',
+            '${formatRoomName(incident['room_id']?.toString())} - Suất: ${incident['show_id'] ?? 'N/A'}',
             style: const TextStyle(
               color: CSAppColors.muted,
               fontSize: 11,

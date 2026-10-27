@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CineSight · Trình Tạo Vé QR & Sơ Đồ Ghế Kiểm Thử Rạp Chiếu</title>
+  <style>
+    :root {
+      --bg: #0A0E17;
+      --card-bg: #121826;
+      --card-inner: #182234;
+      --card-hover: #1E2B42;
+      --border: #24324D;
+      --border-focus: #3B82F6;
+      --primary: #2563EB;
+      --primary-light: #3B82F6;
+      --accent: #38BDF8;
+      --success: #10B981;
+      --danger: #EF4444;
+      --warning: #F59E0B;
+      --purple: #8B5CF6;
+      --text: #F8FAFC;
+      --muted: #94A3B8;
+      --seat-empty: #1E293B;
+      --seat-selected: #0284C7;
+      --seat-vip: #7C3AED;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px 24px 60px 24px;
+    }
+
+    /* TOP HEADER */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 22px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, #2563EB, #0284C7);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+    }
+
+    .brand-title h1 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-title p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(37, 99, 235, 0.12);
+      color: #60A5FA;
+      border: 1px solid rgba(37, 99, 235, 0.3);
+    }
+    .badge.green {
+      background: rgba(16, 185, 129, 0.12);
+      color: #34D399;
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    .badge.purple {
+      background: rgba(139, 92, 246, 0.12);
+      color: #A78BFA;
+      border-color: rgba(139, 92, 246, 0.3);
+    }
+
+    /* MAIN LAYOUT: 2 COLUMNS (LEFT: SETUP & SEATMAP, RIGHT: TICKETS) */
+    .workspace {
+      display: grid;
+      grid-template-columns: 560px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 1200px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* CARDS & PANELS */
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #FFF;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    label small {
+      text-transform: none;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+    }
+
+    /* ROOM SELECTOR BUTTONS */
+    .room-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .room-btn {
+      padding: 10px 8px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: #E2E8F0;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+    .room-btn small {
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .room-btn:hover {
+      border-color: rgba(255, 255, 255, 0.3);
+      background: var(--card-hover);
+    }
+    .room-btn.active {
+      background: rgba(37, 99, 235, 0.2);
+      border-color: var(--primary-light);
+      color: #FFF;
+      box-shadow: 0 0 12px rgba(37, 99, 235, 0.35);
+    }
+    .room-btn.active small {
+      color: #93C5FD;
+    }
+
+    /* INPUTS */
+    input[type="date"], input[type="time"], input[type="text"], textarea, select {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 10px 12px;
+      color: #FFF;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s;
+      width: 100%;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--primary-light);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+    }
+
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* PRESET TIME PILLS (24H FORMAT) */
+    .time-groups {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .time-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+    }
+    .time-label {
+      width: 65px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .chips-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex: 1;
+    }
+    .chip {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #CBD5E1;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chip:hover {
+      background: rgba(37, 99, 235, 0.25);
+      border-color: var(--primary-light);
+      color: #FFF;
+    }
+    .chip.active {
+      background: var(--primary);
+      border-color: var(--primary-light);
+      color: #FFF;
+    }
+
+    /* 2D SEAT MAP CONTAINER */
+    .seatmap-container {
+      background: #0D1322;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .screen-bar {
+      width: 82%;
+      height: 18px;
+      background: linear-gradient(to bottom, rgba(56, 189, 248, 0.35), rgba(56, 189, 248, 0.03));
+      border-top: 3px solid #38BDF8;
+      border-radius: 80px 80px 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #7DD3FC;
+      letter-spacing: 2px;
+      box-shadow: 0 4px 14px rgba(56, 189, 248, 0.15);
+      margin-bottom: 6px;
+    }
+
+    .seatmap-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+      align-items: center;
+      user-select: none;
+    }
+
+    .seat-row {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .row-label {
+      width: 18px;
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #64748B;
+      text-align: center;
+    }
+
+    .seat-btn {
+      width: 25px;
+      height: 23px;
+      background: var(--seat-empty);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 5px;
+      color: #94A3B8;
+      font-size: 9px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .seat-btn:hover {
+      transform: scale(1.15);
+      background: #334155;
+      color: #FFF;
+      z-index: 2;
+    }
+    .seat-btn.selected {
+      background: #0284C7 !important;
+      border-color: #38BDF8 !important;
+      color: #FFF !important;
+      font-weight: 900;
+      box-shadow: 0 0 8px rgba(2, 132, 199, 0.7);
+      transform: scale(1.08);
+    }
+    .seat-btn.camera-seat {
+      border: 1px dashed #F59E0B;
+    }
+    .seat-btn.spacer {
+      visibility: hidden;
+      pointer-events: none;
+      width: 25px;
+      height: 23px;
+    }
+
+    .seatmap-legend {
+      display: flex;
+      gap: 16px;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-box {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* SCENARIOS */
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .scenario-card {
+      padding: 10px 12px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      cursor: pointer;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      transition: all 0.2s;
+    }
+    .scenario-card:hover {
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .scenario-card.active {
+      border-color: var(--primary-light);
+      background: rgba(37, 99, 235, 0.15);
+    }
+    .scenario-info strong {
+      font-size: 12.5px;
+      color: #FFF;
+      display: block;
+    }
+    .scenario-info small {
+      font-size: 10.5px;
+      color: var(--muted);
+      display: block;
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+
+    /* BUTTONS */
+    .btn {
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #2563EB, #0284C7);
+      color: #FFF;
+      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #1D4ED8, #0369A1);
+      transform: translateY(-1px);
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: #FFF;
+    }
+
+    /* RIGHT COLUMN: TICKETS OUTPUT */
+    .output-area {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .output-bar {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .output-meta {
+      display: flex;
+      gap: 18px;
+      font-size: 13px;
+    }
+    .output-meta strong {
+      color: #FFF;
+    }
+
+    /* TICKET CARDS */
+    .tickets-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
+      gap: 18px;
+    }
+    .ticket-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      position: relative;
+      transition: all 0.2s;
+    }
+    .ticket-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+
+    .ticket-head {
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px dashed var(--border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .scenario-pill {
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .pill-valid { background: rgba(16, 185, 129, 0.18); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .pill-err-room { background: rgba(239, 68, 68, 0.18); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .pill-err-show { background: rgba(245, 158, 11, 0.18); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .pill-ai-test { background: rgba(139, 92, 246, 0.18); color: #C084FC; border: 1px solid rgba(139, 92, 246, 0.4); }
+
+    .ticket-qr-wrap {
+      background: #FFFFFF;
+      padding: 16px;
+      margin: 14px auto 8px auto;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      width: 222px;
+      height: 222px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ticket-qr-wrap img, .ticket-qr-wrap canvas {
+      width: 190px !important;
+      height: 190px !important;
+      display: block;
+    }
+
+    .ticket-details {
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+    .seat-highlight {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1px dashed var(--border);
+      padding-bottom: 8px;
+    }
+    .seat-badge {
+      font-size: 26px;
+      font-weight: 900;
+      color: #38BDF8;
+      letter-spacing: -0.5px;
+    }
+    .room-badge {
+      font-size: 13px;
+      font-weight: 700;
+      color: #A5F3FC;
+    }
+
+    .meta-list {
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: var(--muted);
+    }
+    .meta-item {
+      display: flex;
+      justify-content: space-between;
+    }
+    .meta-item span:last-child {
+      font-weight: 600;
+      color: #E2E8F0;
+    }
+
+    .ticket-notice {
+      font-size: 11px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border-left: 3px solid var(--primary-light);
+      line-height: 1.35;
+      color: #CBD5E1;
+    }
+
+    .ticket-actions {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      background: rgba(0, 0, 0, 0.15);
+    }
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      color: #FFF;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-sm:hover {
+      background: rgba(37, 99, 235, 0.2);
+      border-color: var(--primary-light);
+    }
+
+    /* PRINT STYLES */
+    @media print {
+      body { background: #FFF !important; color: #000 !important; padding: 0 !important; }
+      .header, .panel, .output-bar, .ticket-actions { display: none !important; }
+      .workspace { display: block !important; }
+      .tickets-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 14px !important; }
+      .ticket-card { border: 2px solid #000 !important; background: #FFF !important; color: #000 !important; box-shadow: none !important; page-break-inside: avoid; }
+      .ticket-head, .seat-highlight, .meta-item span:last-child, .seat-badge { color: #000 !important; }
+      .ticket-qr-wrap { border: 1px solid #CCC !important; box-shadow: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">🎟️</div>
+      <div class="brand-title">
+        <h1>CineSight · Trình Tạo Vé QR & Sơ Đồ Ghế Rạp Chiếu</h1>
+        <p>Hệ thống sinh vé kiểm thử theo thời gian thực (24h) · Tương thích hoàn toàn Mobile App & AI Camera</p>
+      </div>
+    </div>
+    <div class="badges">
+      <span class="badge green">● Đồng bộ chuẩn 24H</span>
+      <span class="badge purple">● 136 Ghế tương tác</span>
+      <span class="badge">● Chặn ngày quá khứ</span>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <!-- LEFT: CONTROL PANEL & SEAT MAP -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">⚙️ THIẾT LẬP THÔNG TIN VÉ</div>
+        <div id="liveClock" style="font-size:12px; font-weight:700; color:#38BDF8; font-family:monospace;">--:--:--</div>
+      </div>
+
+      <!-- 1. CHỌN PHÒNG CHIẾU -->
+      <div class="form-group">
+        <label>1. Chọn phòng chiếu (Cụm 4 phòng) <small id="roomBadgeDesc">Phòng 4: VIP Cinema</small></label>
+        <div class="room-grid">
+          <button type="button" class="room-btn" data-room="room1" onclick="selectRoom('room1')">
+            🏛️ Phòng 1
+            <small>Standard 2D</small>
+          </button>
+          <button type="button" class="room-btn" data-room="room2" onclick="selectRoom('room2')">
+            🏛️ Phòng 2
+            <small>Dolby 7.1</small>
+          </button>
+          <button type="button" class="room-btn" data-room="room3" onclick="selectRoom('room3')">
+            🏛️ Phòng 3
+            <small>Ghế Da VIP</small>
+          </button>
+          <button type="button" class="room-btn active" data-room="room4" onclick="selectRoom('room4')">
+            🏛️ Phòng 4
+            <small>CCTV Test</small>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. NGÀY & GIỜ (CHUẨN 24H & CHẶN QUÁ KHỨ) -->
+      <div class="row-2">
+        <div class="form-group">
+          <label for="dateInput">2. Ngày chiếu <small>(Chỉ từ hôm nay trở đi)</small></label>
+          <input type="date" id="dateInput" onchange="onDateChanged()">
+        </div>
+        <div class="form-group">
+          <label for="timeInput">3. Giờ chiếu (24h) <small>VD: 08:30 hoặc 19:00</small></label>
+          <input type="time" id="timeInput" value="19:00" onchange="onTimeChanged()">
+        </div>
+      </div>
+
+      <!-- KHUNG CHỌN SUẤT CHIẾU 24H CHUẨN MẪU -->
+      <div class="time-groups">
+        <div class="time-row">
+          <span class="time-label">🌅 Sáng:</span>
+          <div class="chips-wrap">
+            <span class="chip" onclick="applyPresetTime('07:00')">07:00</span>
+            <span class="chip" onclick="applyPresetTime('08:30')">08:30 (Mở cửa)</span>
+            <span class="chip" onclick="applyPresetTime('10:20')">10:20</span>
+          </div>
+        </div>
+        <div class="time-row">
+          <span class="time-label">☀️ Chiều:</span>
+          <div class="chips-wrap">
+            <span class="chip" onclick="applyPresetTime('12:15')">12:15</span>
+            <span class="chip" onclick="applyPresetTime('14:05')">14:05</span>
+            <span class="chip" onclick="applyPresetTime('16:20')">16:20</span>
+          </div>
+        </div>
+        <div class="time-row">
+          <span class="time-label">🌙 Tối:</span>
+          <div class="chips-wrap">
+            <span class="chip active" onclick="applyPresetTime('19:00')">19:00 (Giờ vàng)</span>
+            <span class="chip" onclick="applyPresetTime('20:20')">20:20</span>
+            <span class="chip" onclick="applyPresetTime('20:55')">20:55</span>
+            <span class="chip" onclick="applyPresetTime('22:30')">22:30 (Suất khuya)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. TÊN PHIM -->
+      <div class="form-group">
+        <label for="movieInput">4. Tên phim đang chiếu</label>
+        <input type="text" id="movieInput" value="Chiến Binh Đường Phố">
+      </div>
+
+      <!-- 5. SƠ ĐỒ GHẾ 2D TRỰC QUAN (136 GHẾ) -->
+      <div class="form-group">
+        <label>
+          5. Chọn ghế trên sơ đồ 2D (136 ghế)
+          <small id="selectedCountBadge">Đã chọn: 2 ghế (G05, G06)</small>
+        </label>
+
+        <div class="seatmap-container">
+          <div class="screen-bar">MÀN HÌNH CHIẾU PHIM (SCREEN)</div>
+          
+          <div class="seatmap-grid" id="seatGrid">
+            <!-- Dynamic 136 seats generated by JS -->
+          </div>
+
+          <div class="seatmap-legend">
+            <div class="legend-item"><div class="legend-box" style="background:#1E293B;"></div> Ghế trống</div>
+            <div class="legend-item"><div class="legend-box" style="background:#0284C7;"></div> Ghế đang chọn</div>
+            <div class="legend-item"><div class="legend-box" style="border:1px dashed #F59E0B;"></div> Vùng Camera CCTV</div>
+          </div>
+        </div>
+
+        <!-- Ô nhập chữ đồng bộ 2 chiều -->
+        <input type="text" id="seatsInput" value="G05, G06" oninput="onSeatsTextInput()" placeholder="VD: G05, G06, H05, H06" style="font-family:monospace; font-weight:700; color:#38BDF8;">
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+          <div class="chips-wrap">
+            <span class="chip" onclick="setQuickSeats('G05, G06')">🎯 Camera chính (G05, G06)</span>
+            <span class="chip" onclick="setQuickSeats('G05, G06, H05, H06, I05, I06')">👥 Cụm 6 ghế Camera</span>
+            <span class="chip" onclick="setQuickSeats('A01, A02, B01, B02')">Hàng A & B</span>
+          </div>
+          <button type="button" class="btn-sm" onclick="clearAllSeats()" style="color:#F87171;">Xóa chọn</button>
+        </div>
+      </div>
+
+      <!-- 6. KỊCH BẢN KIỂM THỬ -->
+      <div class="form-group">
+        <label>6. Chọn kịch bản kiểm thử (Test Scenarios)</label>
+        <div class="scenario-grid">
+          <div class="scenario-card active" onclick="setScenario('valid', this)">
+            <input type="radio" name="sc" value="valid" checked>
+            <div class="scenario-info">
+              <strong>✅ Vé Hợp Lệ</strong>
+              <small>Đúng phòng, đúng suất · App quét duyệt vào rạp</small>
+            </div>
+          </div>
+
+          <div class="scenario-card" onclick="setScenario('preset6', this)">
+            <input type="radio" name="sc" value="preset6">
+            <div class="scenario-info">
+              <strong>⭐ Bộ 6 Vé Chuẩn Đồ Án</strong>
+              <small>2 hợp lệ + 1 sai phòng + 1 sai suất + 2 vắng khách</small>
+            </div>
+          </div>
+
+          <div class="scenario-card" onclick="setScenario('err_room', this)">
+            <input type="radio" name="sc" value="err_room">
+            <div class="scenario-info">
+              <strong>🚫 Cố tình Sai Phòng</strong>
+              <small>Vé phòng khác · Mobile App báo đỏ chặn lại</small>
+            </div>
+          </div>
+
+          <div class="scenario-card" onclick="setScenario('err_show', this)">
+            <input type="radio" name="sc" value="err_show">
+            <div class="scenario-info">
+              <strong>⏰ Cố tình Sai Suất</strong>
+              <small>Vé suất khác · Mobile App báo đỏ từ chối</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTION BUTTON -->
+      <button class="btn btn-primary" onclick="generateQRCodes()" style="width: 100%; font-size: 15px; padding: 14px;">
+        🎟️ TẠO MÃ VÉ QR NGAY BÂY GIỜ
+      </button>
+
+      <!-- SYNC TO SERVER AI -->
+      <button class="btn btn-outline" onclick="syncDirectToServer()" style="width: 100%; font-size: 12px; padding: 10px;">
+        🚀 Bắn danh sách vé này lên Server AI (Localhost:8000)
+      </button>
+      <div id="syncStatus" style="font-size:12px; text-align:center; font-weight:700; display:none;"></div>
+    </div>
+
+    <!-- RIGHT: OUTPUT TICKETS -->
+    <div class="output-area">
+      <div class="output-bar">
+        <div class="output-meta">
+          <div>Tổng số vé: <strong id="totalCountDisplay">0</strong></div>
+          <div>Cổng soát: <strong id="activeRoomDisplay">Phòng 4</strong></div>
+          <div>Suất chiếu: <strong id="activeTimeDisplay">19:00</strong></div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick="window.print()">
+            🖨️ In vé / PDF
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="copyAllJSON()">
+            📋 Copy JSON
+          </button>
+        </div>
+      </div>
+
+      <div class="tickets-grid" id="ticketsContainer">
+        <!-- Rendered tickets will appear here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- EMBEDDED STANDALONE QRCODE LIBRARY -->
+  <script>
+  var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this.parsedData=[];for(var b=[],d=0,e=this.data.length;e>d;d++){var f=this.data.charCodeAt(d);f>65536?(b[0]=240|(1835008&f)>>>18,b[1]=128|(258048&f)>>>12,b[2]=128|(4032&f)>>>6,b[3]=128|63&f):f>2048?(b[0]=224|(61440&f)>>>12,b[1]=128|(4032&f)>>>6,b[2]=128|63&f):f>128?(b[0]=192|(1984&f)>>>6,b[1]=128|63&f):b[0]=f,this.parsedData=this.parsedData.concat(b)}this.parsedData.length!=this.data.length&&(this.parsedData.unshift(191),this.parsedData.unshift(187),this.parsedData.unshift(239))}function b(a,b){this.typeNumber=a,this.errorCorrectLevel=b,this.modules=null,this.moduleCount=0,this.dataCache=null,this.dataList=[]}function i(a,b){if(void 0==a.length)throw new Error(a.length+"/"+b);for(var c=0;c<a.length&&0==a[c];)c++;this.num=new Array(a.length-c+b);for(var d=0;d<a.length-c;d++)this.num[d]=a[d+c]}function j(a,b){this.totalCount=a,this.dataCount=b}function k(){this.buffer=[],this.length=0}function m(){return"undefined"!=typeof CanvasRenderingContext2D}function n(){var a=!1,b=navigator.userAgent;return/android/i.test(b)&&(a=!0,aMat=b.toString().match(/android ([0-9]\.[0-9])/i),aMat&&aMat[1]&&(a=parseFloat(aMat[1]))),a}function r(a,b){for(var c=1,e=s(a),f=0,g=l.length;g>=f;f++){var h=0;switch(b){case d.L:h=l[f][0];break;case d.M:h=l[f][1];break;case d.Q:h=l[f][2];break;case d.H:h=l[f][3]}if(h>=e)break;c++}if(c>l.length)throw new Error("Too long data");return c}function s(a){var b=encodeURI(a).toString().replace(/\%[0-9a-fA-F]{2}/g,"a");return b.length+(b.length!=a?3:0)}a.prototype={getLength:function(){return this.parsedData.length},write:function(a){for(var b=0,c=this.parsedData.length;c>b;b++)a.put(this.parsedData[b],8)}},b.prototype={addData:function(b){var c=new a(b);this.dataList.push(c),this.dataCache=null},isDark:function(a,b){if(0>a||this.moduleCount<=a||0>b||this.moduleCount<=b)throw new Error(a+","+b);return this.modules[a][b]},getModuleCount:function(){return this.moduleCount},make:function(){this.makeImpl(!1,this.getBestMaskPattern())},makeImpl:function(a,c){this.moduleCount=4*this.typeNumber+17,this.modules=new Array(this.moduleCount);for(var d=0;d<this.moduleCount;d++){this.modules[d]=new Array(this.moduleCount);for(var e=0;e<this.moduleCount;e++)this.modules[d][e]=null}this.setupPositionProbePattern(0,0),this.setupPositionProbePattern(this.moduleCount-7,0),this.setupPositionProbePattern(0,this.moduleCount-7),this.setupPositionAdjustPattern(),this.setupTimingPattern(),this.setupTypeInfo(a,c),this.typeNumber>=7&&this.setupTypeNumber(a),null==this.dataCache&&(this.dataCache=b.createData(this.typeNumber,this.errorCorrectLevel,this.dataList)),this.mapData(this.dataCache,c)},setupPositionProbePattern:function(a,b){for(var c=-1;7>=c;c++)if(!(-1>=a+c||this.moduleCount<=a+c))for(var d=-1;7>=d;d++)-1>=b+d||this.moduleCount<=b+d||(this.modules[a+c][b+d]=c>=0&&6>=c&&(0==d||6==d)||d>=0&&6>=d&&(0==c||6==c)||c>=2&&4>=c&&d>=2&&4>=d?!0:!1)},getBestMaskPattern:function(){for(var a=0,b=0,c=0;8>c;c++){this.makeImpl(!0,c);var d=f.getLostPoint(this);(0==c||a>d)&&(a=d,b=c)}return b},createMovieClip:function(a,b,c){var d=a.createEmptyMovieClip(b,c),e=1;this.make();for(var f=0;f<this.modules.length;f++)for(var g=f*e,h=0;h<this.modules[f].length;h++){var i=h*e,j=this.modules[f][h];j&&(d.beginFill(0,100),d.moveTo(i,g),d.lineTo(i+e,g),d.lineTo(i+e,g+e),d.lineTo(i,g+e),d.endFill())}return d},setupTimingPattern:function(){for(var a=8;a<this.moduleCount-8;a++)null==this.modules[a][6]&&(this.modules[a][6]=0==a%2);for(var b=8;b<this.moduleCount-8;b++)null==this.modules[6][b]&&(this.modules[6][b]=0==b%2)},setupPositionAdjustPattern:function(){for(var a=f.getPatternPosition(this.typeNumber),b=0;b<a.length;b++)for(var c=0;c<a.length;c++){var d=a[b],e=a[c];if(null==this.modules[d][e])for(var g=-2;2>=g;g++)for(var h=-2;2>=h;h++)this.modules[d+g][e+h]=-2==g||2==g||-2==h||2==h||0==g&&0==h?!0:!1}},setupTypeNumber:function(a){for(var b=f.getBCHTypeNumber(this.typeNumber),c=0;18>c;c++){var d=!a&&1==(1&b>>c);this.modules[Math.floor(c/3)][c%3+this.moduleCount-8-3]=d}for(var c=0;18>c;c++){var d=!a&&1==(1&b>>c);this.modules[c%3+this.moduleCount-8-3][Math.floor(c/3)]=d}},setupTypeInfo:function(a,b){for(var c=this.errorCorrectLevel<<3|b,d=f.getBCHTypeInfo(c),e=0;15>e;e++){var g=!a&&1==(1&d>>e);6>e?this.modules[e][8]=g:8>e?this.modules[e+1][8]=g:this.modules[this.moduleCount-15+e][8]=g}for(var e=0;15>e;e++){var g=!a&&1==(1&d>>e);8>e?this.modules[8][this.moduleCount-e-1]=g:9>e?this.modules[8][15-e-1+1]=g:this.modules[8][15-e-1]=g}this.modules[this.moduleCount-8][8]=!a},mapData:function(a,b){for(var c=-1,d=this.moduleCount-1,e=7,g=0,h=this.moduleCount-1;h>0;h-=2)for(6==h&&h--;;){for(var i=0;2>i;i++)if(null==this.modules[d][h-i]){var j=!1;g<a.length&&(j=1==(1&a[g]>>>e));var k=f.getMask(b,d,h-i);k&&(j=!j),this.modules[d][h-i]=j,e--,-1==e&&(g++,e=7)}if(d+=c,0>d||this.moduleCount<=d){d-=c,c=-c;break}}}},b.PAD0=236,b.PAD1=17,b.createData=function(a,c,d){for(var e=j.getRSBlocks(a,c),g=new k,h=0;h<d.length;h++){var i=d[h];g.put(i.mode,4),g.put(i.getLength(),f.getLengthInBits(i.mode,a)),i.write(g)}for(var l=0,h=0;h<e.length;h++)l+=e[h].dataCount;if(g.getLengthInBits()>8*l)throw new Error("code length overflow. ("+g.getLengthInBits()+">"+8*l+")");for(g.getLengthInBits()+4<=8*l&&g.put(0,4);0!=g.getLengthInBits()%8;)g.putBit(!1);for(;;){if(g.getLengthInBits()>=8*l)break;if(g.put(b.PAD0,8),g.getLengthInBits()>=8*l)break;g.put(b.PAD1,8)}return b.createBytes(g,e)},b.createBytes=function(a,b){for(var c=0,d=0,e=0,g=new Array(b.length),h=new Array(b.length),j=0;j<b.length;j++){var k=b[j].dataCount,l=b[j].totalCount-k;d=Math.max(d,k),e=Math.max(e,l),g[j]=new Array(k);for(var m=0;m<g[j].length;m++)g[j][m]=255&a.buffer[m+c];c+=k;var n=f.getErrorCorrectPolynomial(l),o=new i(g[j],n.getLength()-1),p=o.mod(n);h[j]=new Array(n.getLength()-1);for(var m=0;m<h[j].length;m++){var q=m+p.getLength()-h[j].length;h[j][m]=q>=0?p.get(q):0}}for(var r=0,m=0;m<b.length;m++)r+=b[m].totalCount;for(var s=new Array(r),t=0,m=0;d>m;m++)for(var j=0;j<b.length;j++)m<g[j].length&&(s[t++]=g[j][m]);for(var m=0;e>m;m++)for(var j=0;j<b.length;j++)m<h[j].length&&(s[t++]=h[j][m]);return s};for(var c={MODE_NUMBER:1,MODE_ALPHA_NUM:2,MODE_8BIT_BYTE:4,MODE_KANJI:8},d={L:1,M:0,Q:3,H:2},e={PATTERN000:0,PATTERN001:1,PATTERN010:2,PATTERN011:3,PATTERN100:4,PATTERN101:5,PATTERN110:6,PATTERN111:7},f={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],G15:1335,G18:7973,G15_MASK:21522,getBCHTypeInfo:function(a){for(var b=a<<10;f.getBCHDigit(b)-f.getBCHDigit(f.G15)>=0;)b^=f.G15<<f.getBCHDigit(b)-f.getBCHDigit(f.G15);return(a<<10|b)^f.G15_MASK},getBCHTypeNumber:function(a){for(var b=a<<12;f.getBCHDigit(b)-f.getBCHDigit(f.G18)>=0;)b^=f.G18<<f.getBCHDigit(b)-f.getBCHDigit(f.G18);return a<<12|b},getBCHDigit:function(a){for(var b=0;0!=a;)b++,a>>>=1;return b},getPatternPosition:function(a){return f.PATTERN_POSITION_TABLE[a-1]},getMask:function(a,b,c){switch(a){case e.PATTERN000:return 0==(b+c)%2;case e.PATTERN001:return 0==b%2;case e.PATTERN010:return 0==c%3;case e.PATTERN011:return 0==(b+c)%3;case e.PATTERN100:return 0==(Math.floor(b/2)+Math.floor(c/3))%2;case e.PATTERN101:return 0==b*c%2+b*c%3;case e.PATTERN110:return 0==(b*c%2+b*c%3)%2;case e.PATTERN111:return 0==(b*c%3+(b+c)%2)%2;default:throw new Error("bad maskPattern:"+a)}},getErrorCorrectPolynomial:function(a){for(var b=new i([1],0),c=0;a>c;c++)b=b.multiply(new i([1,g.gexp(c)],0));return b},getLengthInBits:function(a,b){if(b>=1&&10>b)switch(a){case c.MODE_NUMBER:return 10;case c.MODE_ALPHA_NUM:return 9;case c.MODE_8BIT_BYTE:return 8;case c.MODE_KANJI:return 8;default:throw new Error("mode:"+a)}else if(27>b)switch(a){case c.MODE_NUMBER:return 12;case c.MODE_ALPHA_NUM:return 11;case c.MODE_8BIT_BYTE:return 16;case c.MODE_KANJI:return 10;default:throw new Error("mode:"+a)}else{if(!(41>b))throw new Error("type:"+b);switch(a){case c.MODE_NUMBER:return 14;case c.MODE_ALPHA_NUM:return 13;case c.MODE_8BIT_BYTE:return 16;case c.MODE_KANJI:return 12;default:throw new Error("mode:"+a)}}},getLostPoint:function(a){for(var b=a.getModuleCount(),c=0,d=0;b>d;d++)for(var e=0;b>e;e++){for(var f=0,g=a.isDark(d,e),h=-1;1>=h;h++)if(!(0>d+h||d+h>=b))for(var i=-1;1>=i;i++)0>e+i||e+i>=b||(0!=h||0!=i)&&g==a.isDark(d+h,e+i)&&f++;f>5&&(c+=3+f-5)}for(var d=0;b-1>d;d++)for(var e=0;b-1>e;e++){var j=0;a.isDark(d,e)&&j++,a.isDark(d+1,e)&&j++,a.isDark(d,e+1)&&j++,a.isDark(d+1,e+1)&&j++,(0==j||4==j)&&(c+=3)}for(var d=0;b>d;d++)for(var e=0;b-6>e;e++)a.isDark(d,e)&&!a.isDark(d,e+1)&&a.isDark(d,e+2)&&a.isDark(d,e+3)&&a.isDark(d,e+4)&&!a.isDark(d,e+5)&&a.isDark(d,e+6)&&(c+=40);for(var e=0;b>e;e++)for(var d=0;b-6>d;d++)a.isDark(d,e)&&!a.isDark(d+1,e)&&a.isDark(d+2,e)&&a.isDark(d+3,e)&&a.isDark(d+4,e)&&!a.isDark(d+5,e)&&a.isDark(d+6,e)&&(c+=40);for(var k=0,e=0;b>e;e++)for(var d=0;b>d;d++)a.isDark(d,e)&&k++;var l=Math.abs(100*k/b/b-50)/5;return c+=10*l}},g={glog:function(a){if(1>a)throw new Error("glog("+a+")");return g.LOG_TABLE[a]},gexp:function(a){for(;0>a;)a+=255;for(;a>=256;)a-=255;return g.EXP_TABLE[a]},EXP_TABLE:new Array(256),LOG_TABLE:new Array(256)},h=0;8>h;h++)g.EXP_TABLE[h]=1<<h;for(var h=8;256>h;h++)g.EXP_TABLE[h]=g.EXP_TABLE[h-4]^g.EXP_TABLE[h-5]^g.EXP_TABLE[h-6]^g.EXP_TABLE[h-8];for(var h=0;255>h;h++)g.LOG_TABLE[g.EXP_TABLE[h]]=h;i.prototype={get:function(a){return this.num[a]},getLength:function(){return this.num.length},multiply:function(a){for(var b=new Array(this.getLength()+a.getLength()-1),c=0;c<this.getLength();c++)for(var d=0;d<a.getLength();d++)b[c+d]^=g.gexp(g.glog(this.get(c))+g.glog(a.get(d)));return new i(b,0)},mod:function(a){if(this.getLength()-a.getLength()<0)return this;for(var b=g.glog(this.get(0))-g.glog(a.get(0)),c=new Array(this.getLength()),d=0;d<this.getLength();d++)c[d]=this.get(d);for(var d=0;d<a.getLength();d++)c[d]^=g.gexp(g.glog(a.get(d))+b);return new i(c,0).mod(a)}},j.RS_BLOCK_TABLE=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],j.getRSBlocks=function(a,b){var c=j.getRsBlockTable(a,b);if(void 0==c)throw new Error("bad rs block @ typeNumber:"+a+"/errorCorrectLevel:"+b);for(var d=c.length/3,e=[],f=0;d>f;f++)for(var g=c[3*f+0],h=c[3*f+1],i=c[3*f+2],k=0;g>k;k++)e.push(new j(h,i));return e},j.getRsBlockTable=function(a,b){switch(b){case d.L:return j.RS_BLOCK_TABLE[4*(a-1)+0];case d.M:return j.RS_BLOCK_TABLE[4*(a-1)+1];case d.Q:return j.RS_BLOCK_TABLE[4*(a-1)+2];case d.H:return j.RS_BLOCK_TABLE[4*(a-1)+3];default:return void 0}},k.prototype={get:function(a){var b=Math.floor(a/8);return 1==(1&this.buffer[b]>>>7-a%8)},put:function(a,b){for(var c=0;b>c;c++)this.putBit(1==(1&a>>>b-c-1))},getLengthInBits:function(){return this.length},putBit:function(a){var b=Math.floor(this.length/8);this.buffer.length<=b&&this.buffer.push(0),a&&(this.buffer[b]|=128>>>this.length%8),this.length++}};var l=[[17,14,11,7],[32,26,20,14],[53,42,32,24],[78,62,46,34],[106,84,60,44],[134,106,74,58],[154,122,86,64],[192,152,108,84],[230,180,130,98],[271,213,151,119],[321,251,177,137],[367,287,203,155],[425,331,241,177],[458,362,258,194],[520,412,292,220],[586,450,322,250],[644,504,364,280],[718,560,394,310],[792,624,442,338],[858,666,482,382],[929,711,509,403],[1003,779,565,439],[1091,857,611,461],[1171,911,661,511],[1273,997,715,535],[1367,1059,751,593],[1465,1125,805,625],[1528,1190,868,658],[1628,1264,908,698],[1732,1370,982,742],[1840,1452,1030,790],[1952,1538,1112,842],[2068,1628,1168,898],[2188,1722,1228,958],[2303,1809,1283,983],[2431,1911,1351,1051],[2563,1989,1423,1093],[2699,2099,1499,1139],[2809,2213,1579,1219],[2953,2331,1663,1273]],o=function(){var a=function(a,b){this._el=a,this._htOption=b};return a.prototype.draw=function(a){function g(a,b){var c=document.createElementNS("http://www.w3.org/2000/svg",a);for(var d in b)b.hasOwnProperty(d)&&c.setAttribute(d,b[d]);return c}var b=this._htOption,c=this._el,d=a.getModuleCount();Math.floor(b.width/d),Math.floor(b.height/d),this.clear();var h=g("svg",{viewBox:"0 0 "+String(d)+" "+String(d),width:"100%",height:"100%",fill:b.colorLight});h.setAttributeNS("http://www.w3.org/2000/xmlns/","xmlns:xlink","http://www.w3.org/1999/xlink"),c.appendChild(h),h.appendChild(g("rect",{fill:b.colorDark,width:"1",height:"1",id:"template"}));for(var i=0;d>i;i++)for(var j=0;d>j;j++)if(a.isDark(i,j)){var k=g("use",{x:String(i),y:String(j)});k.setAttributeNS("http://www.w3.org/1999/xlink","href","#template"),h.appendChild(k)}},a.prototype.clear=function(){for(;this._el.hasChildNodes();)this._el.removeChild(this._el.lastChild)},a}(),p="svg"===document.documentElement.tagName.toLowerCase(),q=p?o:m()?function(){function a(){this._elImage.src=this._elCanvas.toDataURL("image/png"),this._elImage.style.display="block",this._elCanvas.style.display="none"}function d(a,b){var c=this;if(c._fFail=b,c._fSuccess=a,null===c._bSupportDataURI){var d=document.createElement("img"),e=function(){c._bSupportDataURI=!1,c._fFail&&_fFail.call(c)},f=function(){c._bSupportDataURI=!0,c._fSuccess&&c._fSuccess.call(c)};return d.onabort=e,d.onerror=e,d.onload=f,d.src="data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==",void 0}c._bSupportDataURI===!0&&c._fSuccess?c._fSuccess.call(c):c._bSupportDataURI===!1&&c._fFail&&c._fFail.call(c)}if(this._android&&this._android<=2.1){var b=1/window.devicePixelRatio,c=CanvasRenderingContext2D.prototype.drawImage;CanvasRenderingContext2D.prototype.drawImage=function(a,d,e,f,g,h,i,j){if("nodeName"in a&&/img/i.test(a.nodeName))for(var l=arguments.length-1;l>=1;l--)arguments[l]=arguments[l]*b;else"undefined"==typeof j&&(arguments[1]*=b,arguments[2]*=b,arguments[3]*=b,arguments[4]*=b);c.apply(this,arguments)}}var e=function(a,b){this._bIsPainted=!1,this._android=n(),this._htOption=b,this._elCanvas=document.createElement("canvas"),this._elCanvas.width=b.width,this._elCanvas.height=b.height,a.appendChild(this._elCanvas),this._el=a,this._oContext=this._elCanvas.getContext("2d"),this._bIsPainted=!1,this._elImage=document.createElement("img"),this._elImage.style.display="none",this._el.appendChild(this._elImage),this._bSupportDataURI=null};return e.prototype.draw=function(a){var b=this._elImage,c=this._oContext,d=this._htOption,e=a.getModuleCount(),f=d.width/e,g=d.height/e,h=Math.round(f),i=Math.round(g);b.style.display="none",this.clear();for(var j=0;e>j;j++)for(var k=0;e>k;k++){var l=a.isDark(j,k),m=k*f,n=j*g;c.strokeStyle=l?d.colorDark:d.colorLight,c.lineWidth=1,c.fillStyle=l?d.colorDark:d.colorLight,c.fillRect(m,n,f,g),c.strokeRect(Math.floor(m)+.5,Math.floor(n)+.5,h,i),c.strokeRect(Math.ceil(m)-.5,Math.ceil(n)-.5,h,i)}this._bIsPainted=!0},e.prototype.makeImage=function(){this._bIsPainted&&d.call(this,a)},e.prototype.isPainted=function(){return this._bIsPainted},e.prototype.clear=function(){this._oContext.clearRect(0,0,this._elCanvas.width,this._elCanvas.height),this._bIsPainted=!1},e.prototype.round=function(a){return a?Math.floor(1e3*a)/1e3:a},e}():function(){var a=function(a,b){this._el=a,this._htOption=b};return a.prototype.draw=function(a){for(var b=this._htOption,c=this._el,d=a.getModuleCount(),e=Math.floor(b.width/d),f=Math.floor(b.height/d),g=['<table style="border:0;border-collapse:collapse;">'],h=0;d>h;h++){g.push("<tr>");for(var i=0;d>i;i++)g.push('<td style="border:0;border-collapse:collapse;padding:0;margin:0;width:'+e+"px;height:"+f+"px;background-color:"+(a.isDark(h,i)?b.colorDark:b.colorLight)+';"></td>');g.push("</tr>")}g.push("</table>"),c.innerHTML=g.join("");var j=c.childNodes[0],k=(b.width-j.offsetWidth)/2,l=(b.height-j.offsetHeight)/2;k>0&&l>0&&(j.style.margin=l+"px "+k+"px")},a.prototype.clear=function(){this._el.innerHTML=""},a}();QRCode=function(a,b){if(this._htOption={width:256,height:256,typeNumber:4,colorDark:"#000000",colorLight:"#ffffff",correctLevel:d.H},"string"==typeof b&&(b={text:b}),b)for(var c in b)this._htOption[c]=b[c];"string"==typeof a&&(a=document.getElementById(a)),this._android=n(),this._el=a,this._oQRCode=null,this._oDrawing=new q(this._el,this._htOption),this._htOption.text&&this.makeCode(this._htOption.text)},QRCode.prototype.makeCode=function(a){this._oQRCode=new b(r(a,this._htOption.correctLevel),this._htOption.correctLevel),this._oQRCode.addData(a),this._oQRCode.make(),this._el.title=a,this._oDrawing.draw(this._oQRCode),this.makeImage()},QRCode.prototype.makeImage=function(){"function"==typeof this._oDrawing.makeImage&&(!this._android||this._android>=3)&&this._oDrawing.makeImage()},QRCode.prototype.clear=function(){this._oDrawing.clear()},QRCode.CorrectLevel=d}();
+  </script>
+
+  <!-- APPLICATION LOGIC -->
+  <script>
+    // ROOM CONFIGS
+    const ROOMS = {
+      room1: { name: 'Phòng Chiếu 1', desc: 'Standard 2D · Âm thanh vòm', defaultMovie: 'Ngọn Đồi Hoa Hồng Anh' },
+      room2: { name: 'Phòng Chiếu 2', desc: 'Dolby 7.1 · Màn chiếu bạc', defaultMovie: 'Trái Tim Quái Thú' },
+      room3: { name: 'Phòng Chiếu 3', desc: 'Ghế Da VIP · Không gian rộng', defaultMovie: 'Vùng Đất Quỷ Dữ' },
+      room4: { name: 'Phòng Chiếu 4', desc: 'VIP Cinema · Camera CCTV Test', defaultMovie: 'Chiến Binh Đường Phố' }
+    };
+
+    let selectedRoom = 'room4';
+    let currentScenario = 'valid';
+    let selectedSeats = new Set(['G05', 'G06']);
+    let generatedTicketsData = [];
+
+    // REAL-TIME CLOCK
+    function updateClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('liveClock').innerText = `${h}:${m}:${s} (UTC+7)`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // 1. DATE SETUP: STRICTLY PREVENT PAST DATES
+    function initDateConstraints() {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+
+      const dateEl = document.getElementById('dateInput');
+      dateEl.min = todayStr; // Block all past dates!
+      if (!dateEl.value || dateEl.value < todayStr) {
+        dateEl.value = todayStr;
+      }
+    }
+
+    function onDateChanged() {
+      const dateEl = document.getElementById('dateInput');
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (dateEl.value < todayStr) {
+        alert('Lưu ý: Không thể tạo vé cho các ngày trong quá khứ! Đã tự động đặt về ngày hôm nay.');
+        dateEl.value = todayStr;
+      }
+    }
+
+    // 2. ROOM SELECTION
+    function selectRoom(rId) {
+      selectedRoom = rId;
+      document.querySelectorAll('.room-btn').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-room') === rId);
+      });
+      document.getElementById('roomBadgeDesc').innerText = `${ROOMS[rId].name}: ${ROOMS[rId].desc}`;
+      document.getElementById('activeRoomDisplay').innerText = ROOMS[rId].name;
+      document.getElementById('movieInput').value = ROOMS[rId].defaultMovie;
+    }
+
+    // 3. TIME PRESETS (24H EXACT)
+    function applyPresetTime(timeStr) {
+      document.getElementById('timeInput').value = timeStr;
+      document.querySelectorAll('.chip').forEach(c => {
+        if (c.innerText.startsWith(timeStr)) c.classList.add('active');
+        else if (c.innerText.includes(':')) c.classList.remove('active');
+      });
+      onTimeChanged();
+    }
+
+    function onTimeChanged() {
+      const t = document.getElementById('timeInput').value;
+      document.getElementById('activeTimeDisplay').innerText = t || '19:00';
+    }
+
+    // 4. BUILD 136-SEAT MAP (ROWS A TO L)
+    function buildSeatMap() {
+      const grid = document.getElementById('seatGrid');
+      grid.innerHTML = '';
+
+      // ROW A: 8 seats (A08 to A01) centered with spacers
+      const rowA = document.createElement('div');
+      rowA.className = 'seat-row';
+      rowA.innerHTML = '<span class="row-label">A</span><span class="seat-btn spacer"></span><span class="seat-btn spacer"></span>';
+      for (let i = 8; i >= 1; i--) {
+        const id = `A${String(i).padStart(2, '0')}`;
+        rowA.appendChild(createSeatBtn(id));
+      }
+      rowA.innerHTML += '<span class="seat-btn spacer"></span><span class="seat-btn spacer"></span><span class="seat-btn spacer"></span><span class="seat-btn spacer"></span><span class="seat-btn spacer"></span><span class="seat-btn spacer"></span><span class="row-label">A</span>';
+      grid.appendChild(rowA);
+
+      // ROWS B TO J: 11 seats each (B11..B01 to J11..J01)
+      const letters = ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+      letters.forEach(letter => {
+        const row = document.createElement('div');
+        row.className = 'seat-row';
+        row.innerHTML = `<span class="row-label">${letter}</span><span class="seat-btn spacer"></span>`;
+        for (let i = 11; i >= 1; i--) {
+          const id = `${letter}${String(i).padStart(2, '0')}`;
+          row.appendChild(createSeatBtn(id));
+        }
+        row.innerHTML += `<span class="seat-btn spacer"></span><span class="seat-btn spacer"></span><span class="seat-btn spacer"></span><span class="seat-btn spacer"></span><span class="row-label">${letter}</span>`;
+        grid.appendChild(row);
+      });
+
+      // ROW K: 11 seats (K13..K03), gap of 2 seats, then K02, K01
+      const rowK = document.createElement('div');
+      rowK.className = 'seat-row';
+      rowK.innerHTML = '<span class="row-label">K</span><span class="seat-btn spacer"></span>';
+      for (let i = 13; i >= 3; i--) {
+        const id = `K${String(i).padStart(2, '0')}`;
+        rowK.appendChild(createSeatBtn(id));
+      }
+      rowK.innerHTML += '<span class="seat-btn spacer"></span><span class="seat-btn spacer"></span>';
+      rowK.appendChild(createSeatBtn('K02'));
+      rowK.appendChild(createSeatBtn('K01'));
+      rowK.innerHTML += '<span class="row-label">K</span>';
+      grid.appendChild(rowK);
+
+      // ROW L: 16 seats (L16 to L01) full width
+      const rowL = document.createElement('div');
+      rowL.className = 'seat-row';
+      rowL.innerHTML = '<span class="row-label">L</span>';
+      for (let i = 16; i >= 1; i--) {
+        const id = `L${String(i).padStart(2, '0')}`;
+        rowL.appendChild(createSeatBtn(id));
+      }
+      rowL.innerHTML += '<span class="row-label">L</span>';
+      grid.appendChild(rowL);
+
+      updateSeatMapHighlights();
+    }
+
+    function createSeatBtn(id) {
+      const btn = document.createElement('div');
+      btn.className = 'seat-btn';
+      btn.id = `seat_${id}`;
+      btn.innerText = id.substring(1); // Show "05" instead of "G05" to fit square
+      btn.title = `Ghế ${id}`;
+
+      // Camera test focus seats
+      if (['G05', 'G06', 'H05', 'H06', 'I05', 'I06'].includes(id)) {
+        btn.classList.add('camera-seat');
+      }
+
+      btn.onclick = () => toggleSeat(id);
+      return btn;
+    }
+
+    function toggleSeat(id) {
+      if (selectedSeats.has(id)) {
+        selectedSeats.delete(id);
+      } else {
+        selectedSeats.add(id);
+      }
+      syncSeatsToInput();
+    }
+
+    function updateSeatMapHighlights() {
+      document.querySelectorAll('.seat-btn:not(.spacer)').forEach(btn => {
+        const id = btn.id.replace('seat_', '');
+        btn.classList.toggle('selected', selectedSeats.has(id));
+      });
+      document.getElementById('selectedCountBadge').innerText = `Đã chọn: ${selectedSeats.size} ghế (${Array.from(selectedSeats).join(', ') || 'Chưa chọn'})`;
+    }
+
+    function syncSeatsToInput() {
+      const arr = Array.from(selectedSeats).sort();
+      document.getElementById('seatsInput').value = arr.join(', ');
+      updateSeatMapHighlights();
+    }
+
+    function onSeatsTextInput() {
+      const val = document.getElementById('seatsInput').value;
+      const raw = val.split(/[,;\s\n]+/);
+      selectedSeats.clear();
+      raw.forEach(s => {
+        let clean = s.trim().toUpperCase();
+        if (clean.length === 2 && clean[1] >= '1' && clean[1] <= '9') {
+          clean = clean[0] + '0' + clean[1]; // G5 -> G05
+        }
+        if (clean.length >= 2) selectedSeats.add(clean);
+      });
+      updateSeatMapHighlights();
+    }
+
+    function setQuickSeats(str) {
+      document.getElementById('seatsInput').value = str;
+      onSeatsTextInput();
+    }
+
+    function clearAllSeats() {
+      selectedSeats.clear();
+      syncSeatsToInput();
+    }
+
+    // 5. SCENARIO TOGGLE
+    function setScenario(sc, el) {
+      currentScenario = sc;
+      document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      el.querySelector('input').checked = true;
+
+      if (sc === 'preset6') {
+        setQuickSeats('G05, G06, H05, H06, A01, B02');
+      }
+    }
+
+    // 6. GENERATE QR CODES
+    function generateQRCodes() {
+      const date = document.getElementById('dateInput').value || new Date().toISOString().split('T')[0];
+      const time = document.getElementById('timeInput').value || '19:00';
+      const movie = document.getElementById('movieInput').value.trim() || 'CineSight Movie';
+      const showId = `${date}T${time}`;
+      const room = selectedRoom;
+      const roomName = ROOMS[room].name;
+
+      document.getElementById('activeRoomDisplay').innerText = roomName;
+      document.getElementById('activeTimeDisplay').innerText = `${time} (${date})`;
+
+      const container = document.getElementById('ticketsContainer');
+      container.innerHTML = '';
+      generatedTicketsData = [];
+
+      let ticketsToBuild = [];
+
+      if (currentScenario === 'preset6') {
+        // Bộ 6 vé chuẩn đồ án
+        ticketsToBuild = [
+          {
+            ticket: `TICK-${room.toUpperCase()}-G05`,
+            room: room,
+            roomName: roomName,
+            seat: 'G05',
+            show: showId,
+            time: time,
+            movie: movie,
+            customer: 'Nguyễn Văn An',
+            scenarioType: 'valid',
+            label: 'HỢP LỆ (G05)',
+            desc: 'Khách ngồi đúng ghế G05. App quét thành công, AI xác nhận khớp vé!'
+          },
+          {
+            ticket: `TICK-${room.toUpperCase()}-G06`,
+            room: room,
+            roomName: roomName,
+            seat: 'G06',
+            show: showId,
+            time: time,
+            movie: movie,
+            customer: 'Trần Thị Bình',
+            scenarioType: 'valid',
+            label: 'HỢP LỆ (G06)',
+            desc: 'Khách ngồi đúng ghế G06. App quét thành công, AI xác nhận khớp vé!'
+          },
+          {
+            ticket: `TICK-ERR-ROOM`,
+            room: room === 'room1' ? 'room2' : 'room1', // Cố tình khác phòng
+            roomName: room === 'room1' ? 'Phòng Chiếu 2' : 'Phòng Chiếu 1',
+            seat: 'H05',
+            show: showId,
+            time: time,
+            movie: movie,
+            customer: 'Lê Hoàng Cường',
+            scenarioType: 'err_room',
+            label: 'VÉ SAI PHÒNG',
+            desc: `Khách mua vé ${room === 'room1' ? 'Phòng 2' : 'Phòng 1'} nhưng đi nhầm cổng ${roomName} -> App báo đỏ chặn lại!`
+          },
+          {
+            ticket: `TICK-ERR-SHOW`,
+            room: room,
+            roomName: roomName,
+            seat: 'H06',
+            show: `${date}T14:05`, // Cố tình khác suất
+            time: '14:05 (Suất Chiều)',
+            movie: movie,
+            customer: 'Phạm Minh Đức',
+            scenarioType: 'err_show',
+            label: 'VÉ SAI SUẤT',
+            desc: `Khách mua suất 14:05 nhưng vào suất tối ${time} -> App báo đỏ chặn lại!`
+          },
+          {
+            ticket: `TICK-${room.toUpperCase()}-A01`,
+            room: room,
+            roomName: roomName,
+            seat: 'A01',
+            show: showId,
+            time: time,
+            movie: movie,
+            customer: 'Võ Thị Mai',
+            scenarioType: 'ai_test',
+            label: 'TEST AI: VẮNG MẶT A01',
+            desc: 'Đã quét vé qua cổng, nhưng ghế A01 không có người -> AI cảnh báo ghế trống!'
+          },
+          {
+            ticket: `TICK-${room.toUpperCase()}-B02`,
+            room: room,
+            roomName: roomName,
+            seat: 'B02',
+            show: showId,
+            time: time,
+            movie: movie,
+            customer: 'Đặng Quốc Tuấn',
+            scenarioType: 'ai_test',
+            label: 'TEST AI: VẮNG MẶT B02',
+            desc: 'Đã quét vé qua cổng, nhưng ghế B02 không có người -> AI cảnh báo ghế trống!'
+          }
+        ];
+      } else {
+        const seats = Array.from(selectedSeats);
+        if (seats.length === 0) {
+          alert('Vui lòng chọn ít nhất 1 ghế trên sơ đồ hoặc nhập mã ghế!');
+          return;
+        }
+
+        const sampleNames = ['Nguyễn Văn An', 'Trần Thị Bình', 'Lê Hoàng Cường', 'Phạm Minh Đức', 'Võ Thị Mai', 'Hoàng Văn Em'];
+
+        seats.forEach((seat, idx) => {
+          let tRoom = room;
+          let tRoomName = roomName;
+          let tShow = showId;
+          let tTime = time;
+          let sLabel = 'HỢP LỆ';
+          let sPill = 'valid';
+          let sDesc = `Vé chuẩn phòng ${roomName}, suất ${time}. Quét thành công qua cổng soát vé.`;
+
+          if (currentScenario === 'err_room') {
+            tRoom = room === 'room1' ? 'room2' : 'room1';
+            tRoomName = tRoom === 'room1' ? 'Phòng Chiếu 1' : 'Phòng Chiếu 2';
+            sLabel = 'VÉ SAI PHÒNG';
+            sPill = 'err_room';
+            sDesc = `Vé cố tình thuộc ${tRoomName}, cổng hiện tại đang soát là ${roomName}. Mobile App sẽ chặn lại!`;
+          } else if (currentScenario === 'err_show') {
+            tTime = time === '19:00' ? '14:05' : '19:00';
+            tShow = `${date}T${tTime}`;
+            sLabel = 'VÉ SAI SUẤT';
+            sPill = 'err_show';
+            sDesc = `Vé cố tình thuộc suất ${tTime}, cổng hiện tại đang soát suất ${time}. Mobile App sẽ chặn lại!`;
+          }
+
+          const cust = sampleNames[idx % sampleNames.length];
+          const randId = Math.floor(1000 + Math.random() * 9000);
+          const tId = `TICK-${tRoom.toUpperCase()}-${seat}-${randId}`;
+
+          ticketsToBuild.push({
+            ticket: tId,
+            room: tRoom,
+            roomName: tRoomName,
+            seat: seat,
+            show: tShow,
+            time: tTime,
+            movie: movie,
+            customer: cust,
+            scenarioType: sPill,
+            label: `${sLabel} (${seat})`,
+            desc: sDesc
+          });
+        });
+      }
+
+      generatedTicketsData = ticketsToBuild;
+      document.getElementById('totalCountDisplay').innerText = ticketsToBuild.length;
+
+      // Render tickets into cards
+      ticketsToBuild.forEach((item, index) => {
+        const payload = {
+          ticket: item.ticket,
+          room: item.room,
+          seat: item.seat,
+          show: item.show,
+          customer: item.customer,
+          movie: item.movie
+        };
+        const jsonStr = JSON.stringify(payload);
+
+        let pillClass = 'pill-valid';
+        if (item.scenarioType === 'err_room') pillClass = 'pill-err-room';
+        if (item.scenarioType === 'err_show') pillClass = 'pill-err-show';
+        if (item.scenarioType === 'ai_test') pillClass = 'pill-ai-test';
+
+        const card = document.createElement('div');
+        card.className = 'ticket-card';
+        card.innerHTML = `
+          <div class="ticket-head">
+            <span class="scenario-pill ${pillClass}">${item.label}</span>
+            <span style="font-size:11px; font-family:monospace; color:var(--muted);">${item.ticket}</span>
+          </div>
+
+          <div class="ticket-qr-wrap" id="qr_box_${index}"></div>
+
+          <div class="ticket-details">
+            <div class="seat-highlight">
+              <span class="seat-badge">GHẾ ${item.seat}</span>
+              <span class="room-badge">${item.roomName}</span>
+            </div>
+
+            <div class="meta-list">
+              <div class="meta-item">
+                <span>Suất chiếu:</span>
+                <span>${item.time} (${date})</span>
+              </div>
+              <div class="meta-item">
+                <span>Phim:</span>
+                <span style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${item.movie}</span>
+              </div>
+              <div class="meta-item">
+                <span>Khách hàng:</span>
+                <span>${item.customer}</span>
+              </div>
+            </div>
+
+            <div class="ticket-notice">${item.desc}</div>
+          </div>
+
+          <div class="ticket-actions">
+            <button class="btn-sm" onclick="downloadSingleQR(${index}, '${item.seat}_${item.scenarioType}')">
+              📥 Tải ảnh QR
+            </button>
+            <button class="btn-sm" onclick="copySingleJSON(${index})">
+              📋 Copy JSON
+            </button>
+          </div>
+        `;
+
+        container.appendChild(card);
+
+        // Generate QR code using standalone QRCode
+        const qrEl = document.getElementById(`qr_box_${index}`);
+        new QRCode(qrEl, {
+          text: jsonStr,
+          width: 190,
+          height: 190,
+          colorDark: "#000000",
+          colorLight: "#FFFFFF",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      });
+    }
+
+    function downloadSingleQR(index, suffix) {
+      const qrEl = document.getElementById(`qr_box_${index}`);
+      const img = qrEl.querySelector('img') || qrEl.querySelector('canvas');
+      if (!img) return;
+
+      const link = document.createElement('a');
+      link.download = `VE_${suffix}.png`;
+      link.href = img.src || img.toDataURL("image/png");
+      link.click();
+    }
+
+    function copySingleJSON(index) {
+      const item = generatedTicketsData[index];
+      const payload = {
+        ticket: item.ticket,
+        room: item.room,
+        seat: item.seat,
+        show: item.show,
+        customer: item.customer,
+        movie: item.movie
+      };
+      navigator.clipboard.writeText(JSON.stringify(payload, null, 2)).then(() => {
+        alert(`Đã copy mã JSON của vé ${item.ticket} (${item.seat})!`);
+      });
+    }
+
+    function copyAllJSON() {
+      if (generatedTicketsData.length === 0) {
+        alert('Chưa có vé nào được tạo!');
+        return;
+      }
+      const list = generatedTicketsData.map(item => ({
+        ticket: item.ticket,
+        room: item.room,
+        seat: item.seat,
+        show: item.show,
+        customer: item.customer,
+        movie: item.movie
+      }));
+      navigator.clipboard.writeText(JSON.stringify(list, null, 2)).then(() => {
+        alert(`Đã sao chép toàn bộ ${list.length} vé dưới dạng JSON!`);
+      });
+    }
+
+    async function syncDirectToServer() {
+      if (generatedTicketsData.length === 0) {
+        alert('Vui lòng bấm TẠO MÃ VÉ QR trước khi bắn lên server!');
+        return;
+      }
+
+      const statusEl = document.getElementById('syncStatus');
+      statusEl.style.display = 'block';
+      statusEl.style.color = '#38BDF8';
+      statusEl.innerText = 'Đang đồng bộ vé lên Server AI (http://127.0.0.1:8000)...';
+
+      const validTickets = generatedTicketsData.filter(t => t.scenarioType === 'valid' || t.scenarioType === 'ai_test');
+      if (validTickets.length === 0) {
+        statusEl.innerText = 'Không có vé hợp lệ nào để đồng bộ lên rạp!';
+        return;
+      }
+
+      const roomId = validTickets[0].room;
+      const showId = validTickets[0].show;
+      const ticketsArray = validTickets.map(t => ({ ticket: t.ticket, seat: t.seat }));
+
+      const formData = new FormData();
+      formData.append('room_id', roomId);
+      formData.append('show_id', showId);
+      formData.append('scanned_tickets', JSON.stringify(ticketsArray));
+
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/v1/sync_tickets', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          statusEl.style.color = '#34D399';
+          statusEl.innerText = `✅ Đồng bộ thành công ${ticketsArray.length} vé cho ${roomId.toUpperCase()} (${showId}) lên Server AI!`;
+        } else {
+          statusEl.style.color = '#F87171';
+          statusEl.innerText = `❌ Server từ chối: ${data.error || 'Lỗi không xác định'}`;
+        }
+      } catch (err) {
+        statusEl.style.color = '#F87171';
+        statusEl.innerText = '❌ Không thể kết nối tới http://127.0.0.1:8000 (Vui lòng bật AI Service)';
+      }
+    }
+
+    // INITIALIZATION ON LOAD
+    window.onload = function() {
+      initDateConstraints();
+      buildSeatMap();
+      generateQRCodes();
+    };
+  </script>
+</body>
+</html>

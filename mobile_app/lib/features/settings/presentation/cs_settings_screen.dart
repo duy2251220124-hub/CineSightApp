@@ -18,6 +18,8 @@ class CSSettingsScreen extends StatefulWidget {
 
   final VoidCallback? onNotifications;
 
+  final VoidCallback? onSyncOffline;
+
   final VoidCallback? onChangePassword;
 
   final VoidCallback? onLogout;
@@ -31,6 +33,8 @@ class CSSettingsScreen extends StatefulWidget {
     this.onNavigationChanged,
 
     this.onNotifications,
+
+    this.onSyncOffline,
 
     this.onChangePassword,
 
@@ -96,9 +100,9 @@ class _CSSettingsScreenState extends State<CSSettingsScreen> {
 
                   Text(
 
-                    ApiClient.currentUser?['name'] ?? 'NhÃ¢n viÃªn',
+                    ApiClient.currentUser?['name'] ?? 'Nhân viên',
 
-                    style: TextStyle(
+                    style: const TextStyle(
 
                       fontSize: 17,
 
@@ -110,9 +114,9 @@ class _CSSettingsScreenState extends State<CSSettingsScreen> {
 
                   Text(
 
-                    '${ApiClient.currentUser?['role'] ?? 'Nhân viên'} · ${ApiClient.currentUser?['id'] ?? 'ID'}',
+                    '${ApiClient.currentUser?['role'] ?? 'Nhân viên'} · ${ApiClient.currentUser?['shift_label'] ?? 'Chưa phân ca'}',
 
-                    style: TextStyle(
+                    style: const TextStyle(
 
                       color: CSAppColors.muted,
 
@@ -122,9 +126,9 @@ class _CSSettingsScreenState extends State<CSSettingsScreen> {
 
                   ),
 
-                  SizedBox(height: 5),
+                  const SizedBox(height: 5),
 
-                  CSStatusTag(
+                  const CSStatusTag(
 
                     text: '● ĐANG TRONG CA',
 
@@ -138,7 +142,7 @@ class _CSSettingsScreenState extends State<CSSettingsScreen> {
 
             ),
 
-            CSSettingsSectionTitle('CẤU HÌNH VẬN HÀNH'),
+            const CSSettingsSectionTitle('CẤU HÌNH VẬN HÀNH'),
 
             CSSettingsSwitchTile(
 
@@ -178,9 +182,11 @@ class _CSSettingsScreenState extends State<CSSettingsScreen> {
 
               title: 'Đồng bộ dữ liệu vé',
 
-              subtitle: 'Tự động đồng bộ mỗi 5 phút',
+              subtitle: 'Quản lý và đẩy dữ liệu vé offline lên máy chủ',
 
-              trailing: 'Đã đồng bộ',
+              trailing: 'Xem chi tiết',
+
+              onTap: widget.onSyncOffline,
 
             ),
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/core/utils/room_utils.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
 import 'package:mobile_app/core/widgets/cs_primary_button.dart';
@@ -26,10 +27,10 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
   }
 
   static const List<Map<String, dynamic>> _fallbackRooms = [
-    {'room_id': 'room1', 'name': 'Phòng chiếu 1', 'total_seats': 136, 'is_calibrated': true},
-    {'room_id': 'room2', 'name': 'Phòng chiếu 2', 'total_seats': 136, 'is_calibrated': true},
-    {'room_id': 'room3', 'name': 'Phòng chiếu 3', 'total_seats': 136, 'is_calibrated': true},
-    {'room_id': 'room4', 'name': 'Phòng chiếu 4', 'total_seats': 136, 'is_calibrated': true},
+    {'room_id': 'room1', 'name': 'Phòng chiếu số 1', 'total_seats': 136, 'is_calibrated': true},
+    {'room_id': 'room2', 'name': 'Phòng chiếu số 2', 'total_seats': 136, 'is_calibrated': true},
+    {'room_id': 'room3', 'name': 'Phòng chiếu số 3', 'total_seats': 132, 'is_calibrated': true},
+    {'room_id': 'room4', 'name': 'Phòng chiếu số 4', 'total_seats': 136, 'is_calibrated': true},
   ];
 
   Future<void> _loadRooms() async {
@@ -50,7 +51,7 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
           children: [
             const CSScreenHeader(
               title: 'Chọn phòng chiếu',
-              subtitle: '4 phòng chiếu (136 ghế / phòng · 12 hàng A–L)',
+              subtitle: '4 phòng chiếu (Phòng 1, 2, 4: 136 ghế · Phòng 3: 132 ghế)',
               trailingIcon: Icons.notifications_none,
             ),
             Expanded(
@@ -61,11 +62,8 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
                 itemCount: _rooms.length,
                 itemBuilder: (context, index) {
                   final room = _rooms[index];
-                  final rawRoomId = (room['room_id'] ?? 'room1').toString().replaceAll('seats_config_', '');
-                  final roomName = room['name']?.toString() ??
-                      (rawRoomId.startsWith('room')
-                          ? 'Phòng chiếu ${rawRoomId.replaceAll('room', '')}'
-                          : rawRoomId);
+                  final rawRoomId = (room['room_id'] ?? 'room1').toString();
+                  final roomName = formatRoomName(room['name']?.toString() ?? rawRoomId);
                   final seats = room['total_seats'] ?? 136;
                   final status = room['is_calibrated'] == true ? 'Đã hiệu chuẩn' : 'Chưa hiệu chuẩn';
 
@@ -75,7 +73,10 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
                       borderColor: _selectedIndex == index
                           ? CSAppColors.primary
                           : CSAppColors.border,
-                      onTap: () => setState(() => _selectedIndex = index),
+                      onTap: () {
+                        setState(() => _selectedIndex = index);
+                        widget.onConfirmed?.call(_rooms[index]);
+                      },
                       child: Row(
                         children: [
                           Expanded(
@@ -83,14 +84,16 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '$roomName ($rawRoomId)',
+                                  roomName,
                                   style: const TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 Text(
-                                  'Tổng số ghế: $seats ghế (12 hàng A–L: A=8, B–J=11, K=13, L=15)',
+                                  rawRoomId == 'room3'
+                                      ? 'Tổng số ghế: $seats ghế (10 hàng A–J: A=10, B–I=13, J=18)'
+                                      : 'Tổng số ghế: $seats ghế (12 hàng A–L: A=8, B–J=11, K=13, L=16)',
                                   style: const TextStyle(
                                     color: CSAppColors.muted,
                                     fontSize: 11,
@@ -99,12 +102,23 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
                               ],
                             ),
                           ),
-                          Text(
-                            '● $status',
-                            style: TextStyle(
-                              color: room['is_calibrated'] == true ? CSAppColors.success : CSAppColors.warning,
-                              fontSize: 10,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '● $status',
+                                style: TextStyle(
+                                  color: room['is_calibrated'] == true ? CSAppColors.success : CSAppColors.warning,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Icon(
+                                Icons.chevron_right,
+                                color: CSAppColors.muted,
+                                size: 18,
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -116,7 +130,7 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
             Padding(
               padding: const EdgeInsets.all(10),
               child: CSPrimaryButton(
-                label: 'Xác nhận phòng chiếu',
+                label: 'Xem sơ đồ ghế phòng chiếu',
                 onPressed: _selectedIndex == -1 ? null : () {
                   widget.onConfirmed?.call(_rooms[_selectedIndex]);
                 },

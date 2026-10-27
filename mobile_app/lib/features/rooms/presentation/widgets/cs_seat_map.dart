@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 
 class CSSeatMap extends StatelessWidget {
+  final String roomId;
   final bool showWarnings;
   final bool selectionMode;
   final List<String> ignoredSeats;
@@ -14,6 +15,7 @@ class CSSeatMap extends StatelessWidget {
 
   const CSSeatMap({
     super.key,
+    this.roomId = 'room1',
     this.showWarnings = false,
     this.selectionMode = false,
     this.ignoredSeats = const [],
@@ -141,7 +143,7 @@ class CSSeatMap extends StatelessWidget {
             ),
             SizedBox(width: slotW), // Col 1 (spacer for L1)
             SizedBox(width: slotW), // Col 2 (spacer for seat 1)
-            for (int i = 1; i <= 8; i++) _buildSeatTile('A$i'), // Cols 3-10
+            for (int i = 8; i >= 1; i--) _buildSeatTile('A$i'), // Cols 3-10
             SizedBox(width: slotW * 6), // Cols 11-16
             const SizedBox(
               width: labelW,
@@ -181,12 +183,12 @@ class CSSeatMap extends StatelessWidget {
               ),
             ),
             SizedBox(width: slotW), // Col 1 (spacer for L1)
-            for (int i = 1; i <= 11; i++) _buildSeatTile('K$i'), // Cols 2-12
+            for (int i = 13; i >= 3; i--) _buildSeatTile('K$i'), // Cols 2-12
             SizedBox(
               width: slotW * 2,
-            ), // Cols 13-14 (ô trống thẳng hàng L13, L14 - BỎ LỐI ĐI)
-            _buildSeatTile('K12'), // Col 15
-            _buildSeatTile('K13'), // Col 16
+            ), // Cols 13-14 (ô trống thẳng hàng L4, L3 - BỎ LỐI ĐI)
+            _buildSeatTile('K2'), // Col 15
+            _buildSeatTile('K1'), // Col 16
             const SizedBox(
               width: labelW,
               child: Center(
@@ -225,7 +227,7 @@ class CSSeatMap extends StatelessWidget {
               ),
             ),
             // 16 ghế liền mạch, không có khoảng cách thừa giữa L12 và L13
-            for (int i = 1; i <= 16; i++) _buildSeatTile('L$i'),
+            for (int i = 16; i >= 1; i--) _buildSeatTile('L$i'),
             const SizedBox(
               width: labelW,
               child: Center(
@@ -264,8 +266,54 @@ class CSSeatMap extends StatelessWidget {
             ),
           ),
           SizedBox(width: slotW), // Col 1 (spacer for L1)
-          for (int i = 1; i <= 11; i++) _buildSeatTile('$row$i'), // Cols 2-12
+          for (int i = 11; i >= 1; i--) _buildSeatTile('$row$i'), // Cols 2-12
           SizedBox(width: slotW * 4), // Cols 13-16 (spacers)
+          SizedBox(
+            width: labelW,
+            child: Center(
+              child: Text(
+                row,
+                style: const TextStyle(
+                  color: CSAppColors.muted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildRoom3Row(String row, double slotW) {
+    const labelW = 20.0;
+    final int count = (row == 'A') ? 10 : ((row == 'J') ? 18 : 13);
+    final int leftSpacers = (row == 'A') ? 4 : ((row == 'J') ? 0 : 2);
+    final int rightSpacers = (row == 'A') ? 4 : ((row == 'J') ? 0 : 3);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: labelW,
+            child: Center(
+              child: Text(
+                row,
+                style: const TextStyle(
+                  color: CSAppColors.muted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          if (leftSpacers > 0) SizedBox(width: slotW * leftSpacers),
+          for (int i = 1; i <= count; i++) _buildSeatTile('$row$i'),
+          if (rightSpacers > 0) SizedBox(width: slotW * rightSpacers),
           SizedBox(
             width: labelW,
             child: Center(
@@ -286,11 +334,14 @@ class CSSeatMap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+    final isRoom3 = roomId.toLowerCase().contains('room3') || roomId.contains('3');
+    final rows = isRoom3
+        ? ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+        : ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
     const seatW = 28.0;
     const seatMargin = 1.5;
     const slotW = seatW + (seatMargin * 2); // 31.0
-    const totalRowWidth = (20.0 * 2) + (slotW * 16); // 536.0
+    final totalRowWidth = (20.0 * 2) + (slotW * (isRoom3 ? 18 : 16));
 
     return Column(
       children: [
@@ -304,9 +355,9 @@ class CSSeatMap extends StatelessWidget {
             borderRadius: BorderRadius.circular(50),
           ),
         ),
-        const Text(
-          'MÀN HÌNH / SCREEN (136 GHẾ CHUẨN CAMERA)',
-          style: TextStyle(
+        Text(
+          isRoom3 ? 'MÀN HÌNH / SCREEN (132 GHẾ · PHÒNG CHIẾU SỐ 3)' : 'MÀN HÌNH / SCREEN (136 GHẾ CHUẨN CAMERA)',
+          style: const TextStyle(
             color: CSAppColors.muted,
             fontSize: 9,
             fontWeight: FontWeight.bold,
@@ -365,7 +416,7 @@ class CSSeatMap extends StatelessWidget {
                   ),
                 ),
               ),
-              ...rows.map((row) => _buildRow(row, slotW)),
+              ...rows.map((row) => isRoom3 ? _buildRoom3Row(row, slotW) : _buildRow(row, slotW)),
             ],
           ),
         ),

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getIncidents, resolveIncident, getIncidentCategories } from '../api/cineSightApi';
+import { getIncidents, resolveIncident, getIncidentCategories, getStoredUser } from '../api/cineSightApi';
 import '../styles/dashboard.css';
 
 export default function Incidents() {
@@ -75,17 +75,28 @@ export default function Incidents() {
   }, [incidents, selectedIncident]);
 
   const handleResolve = async (id) => {
-    // Không tự bịa người xử lý vì chưa có login.
-    const resolver = window.prompt("Hệ thống chưa có đăng nhập. Vui lòng nhập tên người xử lý:", "Admin");
-    if (!resolver) return;
+    const currentUser = getStoredUser();
+    if (!currentUser || !currentUser.id) {
+      alert("Vui lòng đăng nhập lại để xác nhận xử lý sự cố.");
+      return;
+    }
 
     try {
-      await resolveIncident(id, resolver);
+      await resolveIncident(id, currentUser.id);
       setIncidents(prev => prev.map(inc => 
-        inc.id === id ? { ...inc, status: 'resolved', resolved_by_name: resolver, resolved_at: new Date().toISOString() } : inc
+        inc.id === id
+          ? {
+              ...inc,
+              status: 'resolved',
+              resolved_by_id: currentUser.id,
+              resolved_by_name: currentUser.name,
+              resolved_at: new Date().toISOString(),
+            }
+          : inc
       ));
     } catch (e) {
-      alert("Không thể đánh dấu xử lý: " + e.message);
+      const errMsg = e?.response?.data?.error || e.message;
+      alert("Không thể đánh dấu xử lý: " + errMsg);
     }
   };
 

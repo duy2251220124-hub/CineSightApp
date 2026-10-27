@@ -114,8 +114,8 @@ class _CSDamagedSeatScreenState extends State<CSDamagedSeatScreen> {
                     ),
                   const SizedBox(height: 10),
                   CSPrimaryButton(
-                    label: 'Thêm ảnh ghế hư',
-                    icon: Icons.add_a_photo_outlined,
+                    label: 'Xác nhận ghế hư (${seats.length})',
+                    icon: Icons.check_circle_outline,
                     onPressed: hasSeats && widget.onAddPhoto != null
                         ? () => widget.onAddPhoto!(seats)
                         : null,

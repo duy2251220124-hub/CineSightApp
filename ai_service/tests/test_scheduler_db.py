@@ -21,7 +21,7 @@ from scheduler import (
 
 
 def create_in_memory_db():
-    """Tạo CSDL SQLite trong RAM (:memory:) với schema chuẩn 100% của movies và showtimes_v2."""
+    """Tạo CSDL SQLite trong RAM (:memory:) với schema chuẩn 100% của movies và showtimes."""
     conn = sqlite3.connect(":memory:")
     cursor = conn.cursor()
     cursor.execute("""
@@ -46,7 +46,7 @@ def create_in_memory_db():
         )
     """)
     cursor.execute("""
-        CREATE TABLE showtimes_v2 (
+        CREATE TABLE showtimes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             room_id TEXT NOT NULL,
             movie_id INTEGER NOT NULL,
@@ -101,11 +101,11 @@ class TestSchedulerDB(unittest.TestCase):
         self.assertEqual(saved_count, total_shows)
 
         cursor = self.conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM showtimes_v2")
+        cursor.execute("SELECT COUNT(*) FROM showtimes")
         db_count = cursor.fetchone()[0]
         self.assertEqual(db_count, total_shows)
 
-        cursor.execute("SELECT start_at, end_at FROM showtimes_v2")
+        cursor.execute("SELECT start_at, end_at FROM showtimes")
         rows = cursor.fetchall()
         for start_at, end_at in rows:
             self.assertTrue(start_at.endswith("+07:00"), f"start_at {start_at} thiếu +07:00")
@@ -122,7 +122,7 @@ class TestSchedulerDB(unittest.TestCase):
         self.assertTrue(day_has_showtimes(self.conn, self.D))
 
         cursor = self.conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM showtimes_v2")
+        cursor.execute("SELECT COUNT(*) FROM showtimes")
         count_after_first = cursor.fetchone()[0]
 
         # Lần 2: chạy lại trên cùng ngày -> phải trả 'skipped' và không thêm dòng nào
@@ -130,7 +130,7 @@ class TestSchedulerDB(unittest.TestCase):
         self.assertEqual(res2["status"], "skipped")
         self.assertEqual(res2["count"], 0)
 
-        cursor.execute("SELECT COUNT(*) FROM showtimes_v2")
+        cursor.execute("SELECT COUNT(*) FROM showtimes")
         count_after_second = cursor.fetchone()[0]
         self.assertEqual(count_after_second, count_after_first)
 
@@ -140,12 +140,12 @@ class TestSchedulerDB(unittest.TestCase):
         # Chèn trước 1 suất chiếu cố ý gây trùng khóa UNIQUE(room_id, show_id)
         duplicate_show_id = f"{self.D.isoformat()}T08:30"
         cursor.execute("""
-            INSERT INTO showtimes_v2 (room_id, movie_id, show_id, start_at, end_at, status, created_at)
+            INSERT INTO showtimes (room_id, movie_id, show_id, start_at, end_at, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, ("room1", 1, duplicate_show_id, f"{duplicate_show_id}:00+07:00", f"{self.D.isoformat()}T10:30:00+07:00", "scheduled", "2026-10-19T00:00:00+07:00"))
         self.conn.commit()
 
-        initial_count = cursor.execute("SELECT COUNT(*) FROM showtimes_v2").fetchone()[0]
+        initial_count = cursor.execute("SELECT COUNT(*) FROM showtimes").fetchone()[0]
         self.assertEqual(initial_count, 1)
 
         movies = load_movie_rows(self.conn)
@@ -156,7 +156,7 @@ class TestSchedulerDB(unittest.TestCase):
             persist_day(self.conn, self.D, sched, "2026-10-19T00:00:00+07:00", cfg=self.cfg)
 
         # Số dòng trong DB phải giữ nguyên = initial_count (1), không có dòng dở dang nào lọt vào
-        current_count = cursor.execute("SELECT COUNT(*) FROM showtimes_v2").fetchone()[0]
+        current_count = cursor.execute("SELECT COUNT(*) FROM showtimes").fetchone()[0]
         self.assertEqual(current_count, initial_count)
 
     def test_D4_movies_table_untouched(self):
@@ -201,12 +201,12 @@ class TestSchedulerDB(unittest.TestCase):
         """D5: Kiểm tra chỉ các bảng trong danh sách cho phép mới được chấp nhận; bảng lạ bị từ chối rõ ràng."""
         # 1. Bảng hợp lệ không ném lỗi
         self.assertEqual(validate_table_name("showtimes"), "showtimes")
-        self.assertEqual(validate_table_name("showtimes_v2"), "showtimes_v2")
 
         # 2. Bảng lạ hoặc SQL injection bị ném ValueError
         invalid_tables = [
             "users",
             "showtimes; DROP TABLE movies;--",
+            "showtimes_v2",
             "showtimes_v3",
             "",
             "admin",

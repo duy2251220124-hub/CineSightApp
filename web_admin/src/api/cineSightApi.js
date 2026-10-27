@@ -9,6 +9,60 @@ const api = axios.create({
   baseURL: API_BASE,
 });
 
+const AUTH_TOKEN_KEY = 'cinesight_auth_token';
+const AUTH_USER_KEY = 'cinesight_auth_user';
+
+export const getStoredToken = () => {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY) || null;
+  } catch {
+    return null;
+  }
+};
+
+export const getStoredUser = () => {
+  try {
+    const raw = localStorage.getItem(AUTH_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const logoutUser = () => {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+  } catch {
+    // ignore storage errors
+  }
+};
+
+api.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const loginUser = async (username, password) => {
+  const res = await api.post('/api/v1/login', {
+    username: (username || '').trim(),
+    password: (password || '').trim(),
+  });
+  if (res.data && res.data.status === 'success') {
+    if (res.data.token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, res.data.token);
+    }
+    if (res.data.user) {
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(res.data.user));
+    }
+  }
+  return res.data;
+};
+
 export { API_BASE };
 
 export const analyzeRoom = async (roomId, showId, imageFile) => {
@@ -124,12 +178,11 @@ export const getIncident = async (id) => {
   return res.data.incident || null;
 };
 
-export const resolveIncident = async (id, resolver) => {
-  const res = await api.post(`/api/v1/incidents/${id}/resolve`, {
-    resolver_id: 1,
-    resolver_name: resolver || 'Quản trị viên',
-    resolver: resolver || 'Quản trị viên'
-  });
+export const resolveIncident = async (id, resolverId = null) => {
+  const storedUser = getStoredUser();
+  const effectiveResolverId = resolverId || (storedUser && storedUser.id) || null;
+  const payload = effectiveResolverId ? { resolver_id: effectiveResolverId } : {};
+  const res = await api.post(`/api/v1/incidents/${id}/resolve`, payload);
   return res.data;
 };
 

@@ -17,14 +17,14 @@ String toShowId(String date, String timeRange) {
 /// Trạng thái suất chiếu đang được chọn toàn cục trong ứng dụng
 class CSActiveShowtime {
   static final ValueNotifier<Map<String, String>> notifier = ValueNotifier({
-    'roomId': 'room1',
-    'showId': 'all',
-    'movieTitle': 'Tất cả suất (Tự động)',
+    'roomId': 'room4',
+    'showId': 'auto',
+    'movieTitle': 'Tự động nhận diện',
   });
 
-  static String get roomId => notifier.value['roomId'] ?? 'room1';
-  static String get showId => notifier.value['showId'] ?? 'all';
-  static String get movieTitle => notifier.value['movieTitle'] ?? 'Tất cả suất (Tự động)';
+  static String get roomId => notifier.value['roomId'] ?? 'room4';
+  static String get showId => notifier.value['showId'] ?? 'auto';
+  static String get movieTitle => notifier.value['movieTitle'] ?? 'Tự động nhận diện';
 
   static void update({required String roomId, required String showId, String? movieTitle}) {
     notifier.value = {

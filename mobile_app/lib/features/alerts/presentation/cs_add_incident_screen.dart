@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/widgets/cs_primary_button.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
-
 import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/features/alerts/presentation/cs_damaged_seat_screen.dart';
 
 class CSAddIncidentScreen extends StatefulWidget {
   final List<String> reportedSeats;
@@ -26,8 +26,10 @@ class CSAddIncidentScreen extends StatefulWidget {
 }
 
 class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
-  int _severity = 2; // Default to 'Cao (Khẩn cấp)' -> map to 'high'
+  int _severity = 2; // Mặc định: 'Cao (Khẩn cấp)' -> 'high'
   String _category = 'seat_damage';
+  String _selectedRoomId = 'room1';
+  late List<String> _seats;
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   bool _isLoading = false;
@@ -38,13 +40,14 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
     if (widget.initialCategory != null) {
       _category = widget.initialCategory!;
     }
-    
-    if (widget.reportedSeats.isNotEmpty) {
-      _titleController.text = 'Hỏng ghế ${widget.reportedSeats.join(', ')}';
-      _descController.text = 'Cần kiểm tra và sửa chữa ghế ${widget.reportedSeats.join(', ')}';
-    } else {
-      _titleController.text = '';
-      _descController.text = '';
+    if (widget.roomId != null && widget.roomId!.isNotEmpty) {
+      _selectedRoomId = widget.roomId!.replaceAll('seats_config_', '').trim();
+    }
+    _seats = List<String>.from(widget.reportedSeats);
+
+    if (_seats.isNotEmpty) {
+      _titleController.text = 'Hỏng ghế ${_seats.join(', ')}';
+      _descController.text = 'Cần kiểm tra và sửa chữa ghế ${_seats.join(', ')}';
     }
   }
 
@@ -53,6 +56,28 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
     _titleController.dispose();
     _descController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openSeatPicker() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (pickerCtx) => CSDamagedSeatScreen(
+          onAddPhoto: (pickedSeats) {
+            setState(() {
+              _seats = List<String>.from(pickedSeats);
+              if (_seats.isNotEmpty && _titleController.text.trim().isEmpty) {
+                _titleController.text = 'Hỏng ghế ${_seats.join(', ')}';
+              }
+              if (_seats.isNotEmpty && _descController.text.trim().isEmpty) {
+                _descController.text = 'Cần kiểm tra và sửa chữa ghế ${_seats.join(', ')}';
+              }
+            });
+            Navigator.pop(pickerCtx);
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -74,14 +99,19 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
       severity: severityStr,
       title: _titleController.text.trim(),
       description: _descController.text.trim(),
-      roomId: widget.roomId,
-      showId: widget.showId,
-      seatIds: widget.reportedSeats,
+      roomId: _selectedRoomId,
+      showId: (widget.showId != null &&
+              widget.showId!.isNotEmpty &&
+              widget.showId != 'auto' &&
+              widget.showId != 'all')
+          ? widget.showId
+          : null,
+      seatIds: _seats,
     );
 
     if (mounted) {
       setState(() => _isLoading = false);
-      
+
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Đã tạo sự cố thành công')),
@@ -89,9 +119,7 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
         if (widget.onIncidentAdded != null) {
           widget.onIncidentAdded!();
         } else {
-          // If called from home screen flow (2 pushes), pop 2 times or to home.
-          // In the new flow, we might just pop until first if not passed callback.
-          Navigator.of(context).popUntil((route) => route.isFirst);
+          Navigator.of(context).pop(true);
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -131,19 +159,49 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                         },
                       ),
                       const SizedBox(height: 12),
-                      if (widget.roomId != null) ...[
-                        const CSFormLabel('PHÒNG / RẠP CHIẾU'),
-                        TextFormField(
-                          initialValue: widget.roomId,
-                          enabled: false,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (widget.reportedSeats.isNotEmpty) ...[
-                        const CSFormLabel('VỊ TRÍ GHẾ'),
-                        TextFormField(
-                          initialValue: widget.reportedSeats.join(', '),
-                          enabled: false,
+                      const CSFormLabel('PHÒNG / RẠP CHIẾU'),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedRoomId,
+                        items: const [
+                          DropdownMenuItem(value: 'room1', child: Text('Phòng chiếu số 1')),
+                          DropdownMenuItem(value: 'room2', child: Text('Phòng chiếu số 2')),
+                          DropdownMenuItem(value: 'room3', child: Text('Phòng chiếu số 3')),
+                          DropdownMenuItem(value: 'room4', child: Text('Phòng chiếu số 4')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _selectedRoomId = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      if (_category == 'seat_damage' || _seats.isNotEmpty) ...[
+                        const CSFormLabel('VỊ TRÍ GHẾ HỎNG'),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: CSAppColors.surfaceStrong,
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                child: Text(
+                                  _seats.isNotEmpty
+                                      ? _seats.join(', ')
+                                      : 'Chưa chọn ghế nào',
+                                  style: TextStyle(
+                                    color: _seats.isNotEmpty ? Colors.white : CSAppColors.muted,
+                                    fontWeight: _seats.isNotEmpty ? FontWeight.w600 : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: _openSeatPicker,
+                              icon: const Icon(Icons.grid_on_outlined, size: 16),
+                              label: const Text('Chọn trên sơ đồ'),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -188,23 +246,6 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                         }),
                       ),
                       const SizedBox(height: 12),
-                      const CSFormLabel('ẢNH CHỤP THỰC TẾ ĐÍNH KÈM'),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: InkWell(
-                          onTap: () {},
-                          child: Container(
-                            width: 68,
-                            height: 68,
-                            decoration: BoxDecoration(
-                              color: CSAppColors.surface,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: CSAppColors.border),
-                            ),
-                            child: const Icon(Icons.add_a_photo_outlined),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),

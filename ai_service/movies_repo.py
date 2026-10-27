@@ -1,4 +1,4 @@
-"""Repository thao tác dữ liệu movies và showtimes_v2 trong SQLite.
+"""Repository thao tác dữ liệu movies và showtimes trong SQLite.
 Chỉ sử dụng thư viện chuẩn: sqlite3, os, datetime, json.
 
 Tuân thủ:
@@ -18,14 +18,41 @@ def get_connection(db_path=None):
     path = db_path or DEFAULT_DB_PATH
     conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
+def _table_columns(cursor, table):
+    return [r[1] for r in cursor.execute(f"PRAGMA table_info({table})")]
+
+
 def init_movies_tables(db_path=None):
-    """Khởi tạo bảng movies và showtimes_v2 (idempotent, CREATE TABLE IF NOT EXISTS)."""
+    """Khởi tạo bảng movies và showtimes (idempotent, CREATE TABLE IF NOT EXISTS).
+
+    Nếu phát hiện CSDL cũ (bảng showtimes kiểu cũ có cột movie_name, hoặc còn showtimes_v2)
+    thì dừng và yêu cầu chạy công cụ di trú: ai_service/tools/migrate_unify_showtimes.py
+    """
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
+        legacy_cols = _table_columns(cursor, "showtimes")
+        has_v2 = bool(_table_columns(cursor, "showtimes_v2"))
+        if "movie_name" in legacy_cols or has_v2:
+            raise RuntimeError(
+                "CSDL còn cấu trúc cũ (showtimes kiểu cũ / showtimes_v2). "
+                "Hãy chạy: python tools/migrate_unify_showtimes.py"
+            )
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS rooms (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                total_seats INTEGER NOT NULL DEFAULT 136,
+                screen_type TEXT NOT NULL DEFAULT '2D Standard',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+        """)
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS movies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +76,7 @@ def init_movies_tables(db_path=None):
         """)
 
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS showtimes_v2 (
+            CREATE TABLE IF NOT EXISTS showtimes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 room_id TEXT NOT NULL,
                 movie_id INTEGER NOT NULL,
@@ -58,15 +85,16 @@ def init_movies_tables(db_path=None):
                 end_at TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'cancelled')),
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (movie_id) REFERENCES movies(id),
+                FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+                FOREIGN KEY (movie_id) REFERENCES movies(id) ON DELETE RESTRICT,
                 UNIQUE (room_id, show_id)
             )
         """)
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_movies_active ON movies(is_active)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_movies_tmdb_id ON movies(tmdb_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_showtimes_v2_room_date ON showtimes_v2(room_id, start_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_showtimes_v2_show_id ON showtimes_v2(show_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_showtimes_room_date ON showtimes(room_id, start_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_showtimes_show_id ON showtimes(show_id)")
         conn.commit()
     finally:
         conn.close()
@@ -318,7 +346,7 @@ def check_showtime_has_records(room_id, show_id, db_path=None):
 
 
 def get_catalog_showtimes(date_str=None, room_id=None, movie_id=None, status="scheduled", db_path=None):
-    """Truy vấn danh sách suất chiếu chuẩn hóa từ showtimes_v2 kèm thông tin phim."""
+    """Truy vấn danh sách suất chiếu chuẩn hóa từ showtimes kèm thông tin phim."""
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
@@ -326,7 +354,7 @@ def get_catalog_showtimes(date_str=None, room_id=None, movie_id=None, status="sc
             SELECT s.id, s.room_id, s.movie_id, s.show_id, s.start_at, s.end_at, s.status, s.created_at,
                    m.title_vi, m.title_original, m.title_override, m.runtime_min, m.runtime_override,
                    m.poster_path, m.backdrop_path, m.source
-            FROM showtimes_v2 s
+            FROM showtimes s
             JOIN movies m ON s.movie_id = m.id
             WHERE 1=1
         """
@@ -360,7 +388,7 @@ def get_catalog_showtimes(date_str=None, room_id=None, movie_id=None, status="sc
 
             room_id = d.get("room_id", "")
             room_num = room_id.replace("room", "")
-            d["room_name"] = f"Phòng chiếu {room_num}" if room_num.isdigit() else room_id
+            d["room_name"] = f"Phòng chiếu số {room_num}" if room_num.isdigit() else room_id
             d["break_minutes"] = 15
 
             runtime_override = d.get("runtime_override")

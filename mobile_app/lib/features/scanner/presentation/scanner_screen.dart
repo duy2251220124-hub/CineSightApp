@@ -11,6 +11,7 @@ import 'package:mobile_app/core/models/scan_models.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
 import 'package:mobile_app/features/scanner/presentation/widgets/cs_scan_result_view.dart';
 import 'package:mobile_app/features/scanner/presentation/cs_scan_history_screen.dart';
+import '../../../core/utils/room_utils.dart';
 
 class ScannerScreen extends StatefulWidget {
   final String roomId;
@@ -137,9 +138,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   String _formatRoomName(String rId) {
-    final clean = rId.replaceAll('seats_config_', '').trim();
-    final num = clean.replaceAll('room', '').trim();
-    return num.isNotEmpty && int.tryParse(num) != null ? 'Phòng $num' : clean;
+    return formatRoomName(rId);
   }
 
   String _formatTimeDisplay(String sId) {
@@ -217,10 +216,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
             final rooms = [
-              {'id': 'room1', 'name': 'Phòng 1'},
-              {'id': 'room2', 'name': 'Phòng 2'},
-              {'id': 'room3', 'name': 'Phòng 3'},
-              {'id': 'room4', 'name': 'Phòng 4'},
+              {'id': 'room1', 'name': 'Phòng chiếu số 1'},
+              {'id': 'room2', 'name': 'Phòng chiếu số 2'},
+              {'id': 'room3', 'name': 'Phòng chiếu số 3'},
+              {'id': 'room4', 'name': 'Phòng chiếu số 4'},
             ];
 
             return Container(
@@ -553,7 +552,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
               title: 'VÉ SAI PHÒNG',
               time: formatScanTime(DateTime.now()),
               customer:
-                  'QR: ${data["room"]} - Cổng soát: ${_formatRoomName(currentRoom)}',
+                  'QR: ${_formatRoomName(data["room"]?.toString() ?? "")} - Cổng soát: ${_formatRoomName(currentRoom)}',
             );
             return;
           }

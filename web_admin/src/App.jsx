@@ -7,7 +7,7 @@ import Settings from './pages/Settings';
 import Employees from './pages/Employees';
 import Incidents from './pages/Incidents';
 import Showtimes from './pages/Showtimes';
-import { getIncidents } from './api/cineSightApi';
+import { getIncidents, loginUser, logoutUser, getStoredUser } from './api/cineSightApi';
 import logoImg from './assets/logo.png';
 import {
   LayoutDashboard,
@@ -35,6 +35,35 @@ const NAV_ITEMS = [
 function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [openIncidents, setOpenIncidents] = useState(0);
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setLoginLoading(true);
+    try {
+      const res = await loginUser(loginUsername, loginPassword);
+      if (res && res.user) {
+        setCurrentUser(res.user);
+        setLoginUsername('');
+        setLoginPassword('');
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Tài khoản hoặc mật khẩu không chính xác';
+      setLoginError(msg);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logoutUser();
+    setCurrentUser(null);
+  };
 
   useEffect(() => {
     const fetchCount = async () => {
@@ -51,6 +80,98 @@ function App() {
     const interval = setInterval(fetchCount, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  if (!currentUser) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#F8FAFC',
+        padding: 20,
+      }}>
+        <div style={{
+          width: '100%',
+          maxWidth: 400,
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: 12,
+          padding: '32px 28px',
+          boxShadow: '0 10px 25px rgba(15, 23, 42, 0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <img
+              src={logoImg}
+              alt="CineSight Logo"
+              style={{ width: 42, height: 42, borderRadius: 10, objectFit: 'cover' }}
+            />
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#0F172A' }}>
+                Cine<span style={{ color: 'var(--brand-blue)' }}>Sight</span> SOC
+              </div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>
+                Đăng nhập hệ thống quản trị & giám sát
+              </div>
+            </div>
+          </div>
+
+          {loginError && (
+            <div style={{
+              background: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              padding: '10px 12px',
+              borderRadius: 8,
+              fontSize: 13,
+              marginBottom: 16,
+            }}>
+              {loginError}
+            </div>
+          )}
+
+          <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
+                TÀI KHOẢN
+              </label>
+              <input
+                type="text"
+                className="soc-input"
+                placeholder="Nhập username (VD: admin, duy)..."
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box' }}
+                required
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
+                MẬT KHẨU
+              </label>
+              <input
+                type="password"
+                className="soc-input"
+                placeholder="Nhập mật khẩu..."
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box' }}
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="soc-btn primary"
+              disabled={loginLoading}
+              style={{ marginTop: 6, padding: '10px 16px', fontWeight: 700 }}
+            >
+              {loginLoading ? 'ĐANG XÁC THỰC...' : 'ĐĂNG NHẬP'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="layout">
@@ -115,6 +236,37 @@ function App() {
             );
           })}
         </nav>
+
+        {/* THÔNG TIN NGƯỜI DÙNG ĐĂNG NHẬP */}
+        <div style={{
+          padding: '12px 14px',
+          borderTop: '1px solid var(--border-color, #E2E8F0)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          background: '#F8FAFC',
+          borderRadius: 8,
+          marginTop: 8,
+        }}>
+          <div style={{ overflow: 'hidden' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+              {currentUser.name}
+            </div>
+            <div style={{ fontSize: 11, color: '#64748B' }}>
+              {currentUser.role} {currentUser.shift_label ? `• ${currentUser.shift_label}` : ''}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="soc-btn"
+            style={{ padding: '4px 8px', fontSize: 11, flexShrink: 0 }}
+            title="Đăng xuất"
+          >
+            Thoát
+          </button>
+        </div>
       </aside>
 
       {/* NỘI DUNG CHÍNH */}

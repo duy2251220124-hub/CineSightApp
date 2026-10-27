@@ -3,18 +3,73 @@ import sys
 import os
 sys.path.append(os.path.dirname(__file__))
 
-from fastapi import FastAPI, UploadFile, File, Form, Body
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, Form, Body, Request
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from ultralytics import YOLO
 import cv2
 import numpy as np
-from database import get_seats, init_db, save_alerts, get_active_alerts, get_all_alerts, resolve_alert, get_tickets_list, get_configs, update_config, get_employees, add_employee, update_employee, delete_employee, create_incident, list_incidents, get_incident, resolve_incident, get_employee, get_showtimes, save_showtime, seed_default_showtimes
+from database import (
+    get_seats,
+    init_db,
+    save_alerts,
+    get_active_alerts,
+    get_all_alerts,
+    resolve_alert,
+    get_tickets_list,
+    get_configs,
+    update_config,
+    get_employees,
+    add_employee,
+    update_employee,
+    delete_employee,
+    create_incident,
+    list_incidents,
+    get_incident,
+    resolve_incident,
+    get_employee,
+    showtime_exists,
+)
+from security import create_token, verify_token
 from seat_mapper import load_seats_config, process_ai_detections, generate_alerts
 from movies_repo import init_movies_tables, get_all_movies, get_catalog_showtimes
 
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB giới hạn ảnh upload (Điểm 9)
 
+
+def _extract_bearer_user(request: Request) -> Optional[dict]:
+    """Trích xuất và xác thực Bearer Token từ Header Authorization (Điểm 1A)."""
+    if request is None:
+        return None
+    auth_header = request.headers.get("Authorization") or request.headers.get("authorization") or ""
+    if not auth_header.lower().startswith("bearer "):
+        return None
+    raw_token = auth_header[7:].strip()
+    user_id = verify_token(raw_token)
+    if user_id is None:
+        return None
+    return get_employee(user_id)
+
+
+def _require_auth_error(request: Request, require_manager: bool = False) -> Optional[JSONResponse]:
+    """Kiểm tra xác thực và phân quyền (Điểm 1A):
+    - Nếu không có token hợp lệ -> trả về 401.
+    - Nếu require_manager=True nhưng user.role != 'Quản lý' -> trả về 403.
+    """
+    user = _extract_bearer_user(request)
+    if not user:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Yêu cầu đăng nhập (thiếu hoặc hết hạn Bearer Token)."},
+        )
+    if require_manager and str(user.get("role", "")).strip() != "Quản lý":
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Chỉ tài khoản Quản lý mới có quyền thực hiện thao tác này."},
+        )
+    return None
 
 
 app = FastAPI(
@@ -44,7 +99,6 @@ app.add_middleware(
 
 init_db()
 init_movies_tables()
-seed_default_showtimes()
 
 @app.get("/")
 def health_check():
@@ -59,6 +113,8 @@ def sync_tickets_from_app(
     import json
     try:
         tickets_list = json.loads(scanned_tickets)
+        if not isinstance(tickets_list, list):
+            return JSONResponse(status_code=400, content={"error": "scanned_tickets phải là mảng JSON."})
         from database import save_tickets
         from seat_mapper import normalize_seat
         
@@ -68,6 +124,8 @@ def sync_tickets_from_app(
             
         save_tickets(room_id, show_id, tickets_list)
         return {"status": "success", "message": f"Đã lưu {len(tickets_list)} vé cho phòng {room_id}, suất {show_id}"}
+    except ValueError as ve:
+        return JSONResponse(status_code=404, content={"error": str(ve)})
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -77,7 +135,19 @@ async def analyze_cinema_room(
     room_id: str = Form(..., description="Mã phòng chiếu. VD: room1"),
     show_id: str = Form(..., description="Mã suất chiếu. VD: 2026-09-25T19:30")
 ):
-    tap_A = get_seats(room_id, show_id)
+    # Điểm 8: Không cho phép chạy âm thầm khi mô hình YOLO chưa tải được
+    if model is None:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Mô hình AI (YOLO) chưa sẵn sàng. Không thể phân tích ảnh lúc này."}
+        )
+
+    # Điểm 4A: Từ chối phân tích nếu suất chiếu không tồn tại trong lịch chiếu
+    if not showtime_exists(room_id, show_id):
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Suất chiếu '{show_id}' tại phòng '{room_id}' không tồn tại trong lịch chiếu."}
+        )
 
     seats_config = load_seats_config(room_id)
     if not seats_config:
@@ -86,21 +156,50 @@ async def analyze_cinema_room(
             content={"error": f"Chưa có bản đồ ghế cho phòng '{room_id}'."}
         )
 
+    # Điểm 9: Kiểm tra kích thước và tính hợp lệ của file ảnh trước khi decode
     contents = await image.read()
+    if not contents:
+        return JSONResponse(status_code=400, content={"error": "File ảnh tải lên bị rỗng."})
+    if len(contents) > MAX_IMAGE_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={"error": f"Kích thước ảnh vượt quá giới hạn cho phép ({MAX_IMAGE_BYTES // (1024 * 1024)}MB)."}
+        )
+
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is not None and (img.shape[1] != 1920 or img.shape[0] != 1080):
-        img = cv2.resize(img, (1920, 1080))
+    if img is None or img.size == 0:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Dữ liệu tải lên không phải là định dạng ảnh hợp lệ (JPEG/PNG)."}
+        )
 
+    tap_A = get_seats(room_id, show_id)
+
+    h_img, w_img = img.shape[:2]
+    scale_x = 1920.0 / w_img if w_img > 0 else 1.0
+    scale_y = 1080.0 / h_img if h_img > 0 else 1.0
+
+    import time
+    from database import save_inference_log
+
+    t_start = time.perf_counter()
     detected_heads = []
-    if model:
-        results = model.predict(img, conf=MODEL_CONF, imgsz=MODEL_IMGSZ, classes=[0], verbose=False)
-        for r in results:
-            for box in r.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                detected_heads.append(((x1 + x2) / 2, (y1 + y2) / 2))
+    results = model.predict(img, conf=MODEL_CONF, iou=0.45, imgsz=MODEL_IMGSZ, classes=[0], verbose=False)
+    for r in results:
+        for box in r.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            cx = ((x1 + x2) / 2) * scale_x
+            cy = ((y1 + y2) / 2) * scale_y
+            detected_heads.append((cx, cy))
+    t_after_yolo = time.perf_counter()
 
     tap_B = process_ai_detections(detected_heads, seats_config)
+    t_after_map = time.perf_counter()
+
+    yolo_time_ms = round((t_after_yolo - t_start) * 1000.0, 2)
+    mapping_time_ms = round((t_after_map - t_after_yolo) * 1000.0, 2)
+    inference_time_ms = round((t_after_map - t_start) * 1000.0, 2)
 
     configs = get_configs()
     try:
@@ -124,6 +223,23 @@ async def analyze_cinema_room(
     if alert_result.get("over_capacity"):
         save_alerts(room_id, show_id, "over_capacity", [None])
 
+    save_inference_log(
+        room_id=room_id,
+        show_id=show_id,
+        image_width=w_img,
+        image_height=h_img,
+        total_seats=len(seats_config),
+        booked_tickets_count=len(tap_A),
+        detected_heads_count=len(detected_heads),
+        mapped_seats_count=len(tap_B),
+        illegal_count=len(alert_result["illegal_occupants"]),
+        missing_count=len(alert_result["missing_guests"]),
+        over_capacity=bool(alert_result.get("over_capacity")),
+        inference_time_ms=inference_time_ms,
+        yolo_time_ms=yolo_time_ms,
+        mapping_time_ms=mapping_time_ms,
+    )
+
     return {
         "status": "success",
         "room_id": room_id,
@@ -133,9 +249,19 @@ async def analyze_cinema_room(
             "total_detected_people": len(detected_heads),
             "tap_A_from_app": list(tap_A),
             "tap_B_from_camera": list(tap_B),
+            "inference_time_ms": inference_time_ms,
+            "yolo_time_ms": yolo_time_ms,
+            "mapping_time_ms": mapping_time_ms,
         },
         "alerts": alert_result
     }
+
+
+@app.get("/api/v1/inference_logs")
+def fetch_inference_logs(room_id: str = None, show_id: str = None, limit: int = 50):
+    from database import get_inference_logs
+    logs = get_inference_logs(room_id=room_id, show_id=show_id, limit=limit)
+    return {"status": "success", "logs": logs}
 
 
 @app.get("/api/v1/alerts")
@@ -147,6 +273,15 @@ def fetch_alerts(room_id: str = None):
 def fetch_alerts_history(room_id: str = None, alert_type: str = None, status: str = None):
     alerts = get_all_alerts(room_id, alert_type, status)
     return {"status": "success", "alerts": alerts}
+
+@app.delete("/api/v1/alerts")
+def delete_alerts_endpoint(request: Request, room_id: str = None, show_id: str = None):
+    auth_err = _require_auth_error(request, require_manager=False)
+    if auth_err:
+        return auth_err
+    from database import clear_alerts
+    clear_alerts(room_id, show_id)
+    return {"status": "success", "message": "Đã xóa toàn bộ cảnh báo"}
 
 @app.get("/api/v1/rooms")
 def fetch_rooms():
@@ -162,18 +297,26 @@ def fetch_rooms():
             raw_name = os.path.splitext(os.path.basename(config_path))[0]
             room_id = raw_name.replace("seats_config_", "")
             room_num = room_id.replace("room", "")
-            room_name = f"Phòng chiếu {room_num}" if room_num.isdigit() else room_id
+            room_name = f"Phòng chiếu số {room_num}" if room_num.isdigit() else room_id
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     seats_data = json.load(f)
                 total_seats = len(seats_data)
                 is_calibrated = os.path.exists(os.path.join(calibration_dir, f"{room_id}.jpg"))
+                rows_dict = {}
+                for sname in sorted(seats_data.keys()):
+                    m = re.match(r'([A-Za-z]+)', sname)
+                    if m:
+                        r_code = m.group(1).upper()
+                        rows_dict[r_code] = rows_dict.get(r_code, 0) + 1
+                rows_list = list(rows_dict.keys())
+
                 rooms.append({
                     "room_id": room_id,
                     "name": room_name,
                     "total_seats": total_seats,
-                    "rows": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"],
-                    "row_counts": {"A": 8, "B": 11, "C": 11, "D": 11, "E": 11, "F": 11, "G": 11, "H": 11, "I": 11, "J": 11, "K": 13, "L": 16},
+                    "rows": rows_list,
+                    "row_counts": rows_dict,
                     "is_calibrated": is_calibrated,
                     "config_file": f"seats_configs/{raw_name}.json"
                 })
@@ -196,12 +339,21 @@ def get_calibration_image(room_id: str):
 
 @app.get("/api/v1/rooms/{room_id}/seats")
 def fetch_room_seats(room_id: str):
-    clean_room_id = room_id.replace("seats_config_", "")
-    seats_config = load_seats_config(clean_room_id)
+    clean_room_id = room_id.replace("seats_config_", "").strip()
+    if clean_room_id.lower() == "all":
+        best_cfg = {}
+        for r in ["room1", "room4", "room2", "room3"]:
+            cfg = load_seats_config(r)
+            if cfg and len(cfg) > len(best_cfg):
+                best_cfg = cfg
+        seats_config = best_cfg
+    else:
+        seats_config = load_seats_config(clean_room_id)
+
     if not seats_config:
-        return JSONResponse(status_code=404, content={"error": f"Không tìm thấy sơ đồ ghế cho phòng '{clean_room_id}'"})
+        return JSONResponse(status_code=404, content={"error": f"Không tìm thấy sơ đồ ghế cho '{clean_room_id}'"})
     room_num = clean_room_id.replace("room", "")
-    room_name = f"Phòng chiếu {room_num}" if room_num.isdigit() else clean_room_id
+    room_name = "Tất cả phòng chiếu (Đồng bộ)" if clean_room_id.lower() == "all" else (f"Phòng chiếu {room_num}" if room_num.isdigit() else clean_room_id)
     return {
         "status": "success",
         "room_id": clean_room_id,
@@ -213,13 +365,28 @@ def fetch_room_seats(room_id: str):
         "polygons": seats_config
     }
 
-class ShowtimePayload(BaseModel):
-    room_id: str
-    date: str
-    start_time: str
-    duration_minutes: int
-    movie_name: str
-    break_minutes: int = 10
+@app.post("/api/v1/rooms/{room_id}/seats")
+async def save_room_seats_endpoint(room_id: str, request: Request):
+    auth_err = _require_auth_error(request, require_manager=True)
+    if auth_err:
+        return auth_err
+    try:
+        data = await request.json()
+        clean_room_id = room_id.replace("seats_config_", "").strip().lower()
+        targets = ["room1", "room2", "room3", "room4"] if clean_room_id == "all" else [clean_room_id]
+        
+        cfg_dir = os.path.join(os.path.dirname(__file__), "seats_configs")
+        os.makedirs(cfg_dir, exist_ok=True)
+        for r in targets:
+            config_path = os.path.join(cfg_dir, f"seats_config_{r}.json")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+                
+        msg = f"Đã lưu thành công {len(data)} ghế đồng bộ cho TẤT CẢ các phòng (room1 -> room4)" if clean_room_id == "all" else f"Đã lưu thành công {len(data)} ghế cho {clean_room_id}"
+        return {"status": "success", "message": msg}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
 
 @app.get("/api/v1/showtimes")
 def fetch_showtimes_endpoint(room_id: str = None, date: str = None, movie_id: int = None):
@@ -286,25 +453,11 @@ def about_endpoint():
         ]
     }
 
-@app.post("/api/v1/showtimes")
-def create_showtime_endpoint(payload: ShowtimePayload):
-    if payload.duration_minutes < 105 or payload.duration_minutes > 120:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Thời lượng phim theo quy định phải từ 105 phút (1h45p) đến 120 phút (2h00p)."}
-        )
-    item = save_showtime(
-        room_id=payload.room_id.replace("seats_config_", ""),
-        date=payload.date,
-        start_time=payload.start_time,
-        duration_minutes=payload.duration_minutes,
-        movie_name=payload.movie_name,
-        break_minutes=payload.break_minutes
-    )
-    return {"status": "success", "showtime": item}
-
 @app.delete("/api/v1/tickets")
-def delete_tickets_endpoint(room_id: str = None, show_id: str = None):
+def delete_tickets_endpoint(request: Request, room_id: str = None, show_id: str = None):
+    auth_err = _require_auth_error(request, require_manager=False)
+    if auth_err:
+        return auth_err
     from database import clear_tickets
     clear_tickets(room_id, show_id)
     return {"status": "success", "message": "Đã xóa toàn bộ vé"}
@@ -315,7 +468,10 @@ def fetch_tickets(room_id: str, show_id: str = None):
     return {"status": "success", "tickets": tickets}
 
 @app.post("/api/v1/resolve_alert/{alert_id}")
-def mark_alert_resolved(alert_id: int):
+def mark_alert_resolved(alert_id: int, request: Request):
+    auth_err = _require_auth_error(request, require_manager=False)
+    if auth_err:
+        return auth_err
     resolve_alert(alert_id)
     return {"status": "success", "message": f"Đã đánh dấu cảnh báo {alert_id} là đã xử lý."}
 
@@ -328,7 +484,10 @@ def fetch_configs():
     return {"status": "success", "configs": get_configs()}
 
 @app.post("/api/v1/configs")
-def save_config(payload: ConfigPayload):
+def save_config(payload: ConfigPayload, request: Request):
+    auth_err = _require_auth_error(request, require_manager=True)
+    if auth_err:
+        return auth_err
     update_config(payload.key, payload.value)
     return {"status": "success"}
 
@@ -344,7 +503,10 @@ def fetch_employees():
     return {"status": "success", "employees": get_employees()}
 
 @app.post("/api/v1/employees")
-def create_employee(payload: EmployeePayload):
+def create_employee(payload: EmployeePayload, request: Request):
+    auth_err = _require_auth_error(request, require_manager=True)
+    if auth_err:
+        return auth_err
     try:
         if payload.shift:
             if payload.shift not in [s["code"] for s in SHIFTS]:
@@ -355,7 +517,10 @@ def create_employee(payload: EmployeePayload):
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 @app.put("/api/v1/employees/{emp_id}")
-def edit_employee(emp_id: int, payload: EmployeePayload):
+def edit_employee(emp_id: int, payload: EmployeePayload, request: Request):
+    auth_err = _require_auth_error(request, require_manager=True)
+    if auth_err:
+        return auth_err
     try:
         if payload.shift:
             if payload.shift not in [s["code"] for s in SHIFTS]:
@@ -366,7 +531,10 @@ def edit_employee(emp_id: int, payload: EmployeePayload):
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 @app.delete("/api/v1/employees/{emp_id}")
-def remove_employee(emp_id: int):
+def remove_employee(emp_id: int, request: Request):
+    auth_err = _require_auth_error(request, require_manager=True)
+    if auth_err:
+        return auth_err
     delete_employee(emp_id)
     return {"status": "success"}
 
@@ -376,24 +544,11 @@ class LoginPayload(BaseModel):
 
 @app.post("/api/v1/login")
 def login_user(payload: LoginPayload):
-    import sqlite3
-    from database import DB_PATH
-    username_clean = payload.username.strip()
-    password_clean = payload.password.strip()
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, role, shift FROM employees WHERE LOWER(username)=LOWER(?) AND password=?", (username_clean, password_clean))
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        shift_code = row[3]
-        shift_label = "Chưa phân ca"
-        if shift_code:
-            for s in SHIFTS:
-                if s["code"] == shift_code:
-                    shift_label = s["label"]
-                    break
-        return {"status": "success", "user": {"id": row[0], "name": row[1], "role": row[2], "shift": shift_code, "shift_label": shift_label}}
+    from database import authenticate_employee
+    user = authenticate_employee(payload.username, payload.password)
+    if user:
+        token = create_token(user["id"])
+        return {"status": "success", "token": token, "user": user}
     return JSONResponse(status_code=401, content={"error": "Tài khoản hoặc mật khẩu không chính xác"})
 
 
@@ -413,15 +568,21 @@ class IncidentPayload(BaseModel):
     room_id: str = None
     show_id: str = None
     seat_ids: list = []
-    reporter_id: int
-    reporter_name: str
-    reporter_role: str
+    reporter_id: Optional[int] = None
+    reporter_name: Optional[str] = None
+    reporter_role: Optional[str] = None
 
 import datetime
 
 @app.post("/api/v1/incidents")
-def add_incident(payload: IncidentPayload):
+def add_incident(payload: IncidentPayload, request: Request):
     try:
+        # Ưu tiên lấy người báo cáo từ Bearer Token nếu có (Điểm 1A & Điểm 5)
+        authed_user = _extract_bearer_user(request)
+        effective_reporter_id = authed_user["id"] if authed_user else payload.reporter_id
+        if effective_reporter_id is None:
+            return JSONResponse(status_code=401, content={"error": "Yêu cầu đăng nhập hoặc cung cấp reporter_id hợp lệ."})
+
         # Validate category
         if payload.category not in [c["code"] for c in INCIDENT_CATEGORIES]:
             return JSONResponse(status_code=400, content={"error": "Loại sự cố không hợp lệ"})
@@ -440,11 +601,16 @@ def add_incident(payload: IncidentPayload):
         import json
         seat_ids_json = json.dumps(normalized_seats) if normalized_seats else ""
         
-        # Determine shift label based on reporter_id
+        emp = get_employee(effective_reporter_id)
+        if not emp:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Nhân viên báo cáo (id={effective_reporter_id}) không tồn tại."},
+            )
+
         shift_label = "Chưa phân ca"
-        emp = get_employee(payload.reporter_id)
-        if emp and len(emp) > 4 and emp.get('shift'):
-            shift_code = emp.get('shift')
+        shift_code = emp.get("shift")
+        if shift_code:
             for s in SHIFTS:
                 if s["code"] == shift_code:
                     shift_label = s["label"]
@@ -460,12 +626,10 @@ def add_incident(payload: IncidentPayload):
             room_id=payload.room_id,
             show_id=payload.show_id,
             seat_ids=seat_ids_json,
-            reporter_id=payload.reporter_id,
-            reporter_name=payload.reporter_name,
-            reporter_role=payload.reporter_role,
-            shift_label=shift_label,
+            reporter_id=effective_reporter_id,
             created_at=created_at,
-            status="open"
+            status="open",
+            reporter_shift=shift_code,
         )
         return {"status": "success", "id": inc_id, "created_at": created_at, "shift_label": shift_label}
     except Exception as e:
@@ -496,18 +660,30 @@ def fetch_incident(incident_id: int):
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 class ResolveIncidentPayload(BaseModel):
-    resolver_id: int = 1
-    resolver_name: str = "Quản trị viên"
-    resolver: str = None
+    resolver_id: Optional[int] = None
+    resolver_name: Optional[str] = None
+    resolver: Optional[str] = None
 
 @app.post("/api/v1/incidents/{incident_id}/resolve")
-def resolve_incident_endpoint(incident_id: int, payload: ResolveIncidentPayload):
+def resolve_incident_endpoint(incident_id: int, request: Request, payload: ResolveIncidentPayload = Body(default=ResolveIncidentPayload())):
     try:
+        # Ưu tiên lấy người xử lý từ Bearer Token (Điểm 1A, 2, 5)
+        authed_user = _extract_bearer_user(request)
+        effective_resolver_id = authed_user["id"] if authed_user else (payload.resolver_id if payload else None)
+        if effective_resolver_id is None:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Yêu cầu đăng nhập hoặc cung cấp resolver_id hợp lệ để xác nhận xử lý sự cố."},
+            )
+
         resolved_at = datetime.datetime.now().astimezone().isoformat()
-        res_name = payload.resolver_name if payload.resolver_name != "Quản trị viên" else (payload.resolver or payload.resolver_name)
-        res_id = payload.resolver_id or 1
-        resolve_incident(incident_id, res_id, res_name, resolved_at)
-        return {"status": "success", "message": f"Đã đánh dấu sự cố {incident_id} là đã xử lý.", "resolved_at": resolved_at}
+        resolve_incident(incident_id, effective_resolver_id, None, resolved_at)
+        return {
+            "status": "success",
+            "message": f"Đã đánh dấu sự cố {incident_id} là đã xử lý.",
+            "resolved_at": resolved_at,
+            "resolved_by_id": effective_resolver_id,
+        }
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 

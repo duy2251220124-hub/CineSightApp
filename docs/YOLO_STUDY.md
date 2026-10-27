@@ -444,7 +444,7 @@ alpha = v / (1 - IoU + v + eps)
 CIoU  = IoU - (rho2 / c2 + v * alpha)
 ```
 
-- **Đọc ra bằng lời**:
+- **Đọc ra bằng lời**:d
   - **`IoU` (Intersection over Union)** bằng diện tích phần giao nhau giữa hai khung chia cho diện tích phần hợp của chúng (`IoU` nằm từ `0` đến `1`). Nhược điểm của `IoU` thuần là nếu hai khung không chạm nhau (`Giao = 0` -> `IoU = 0`), đạo hàm bằng `0` nên mô hình không biết hai khung cách nhau xa hay gần; hoặc hai khung có cùng `IoU` nhưng lệch tâm hay méo tỉ lệ chiều rộng/chiều cao.
   - **`CIoU` (Complete IoU)** lấy `IoU` trừ đi hai khoản phạt hình học:
     1. `rho2 / c2`: Tỉ số giữa bình phương khoảng cách hai tâm khung (`rho2`) và bình phương đường chéo hình chữ nhật bao ngoài (`c2`) — phạt nặng khi tâm khung dự đoán lệch khỏi tâm khung thật.

@@ -99,7 +99,7 @@ def print_day_detail(day: date, day_schedule: dict, cfg: SchedulerConfig):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Sinh lịch suất chiếu mô phỏng cho CineSight (showtimes_v2)"
+        description="Sinh lịch suất chiếu mô phỏng cho CineSight (showtimes)"
     )
     # Lấy ngày hiện tại theo múi giờ chuẩn VN (UTC+7)
     today_vn = datetime.datetime.now(TZ_VN).date()
@@ -122,8 +122,8 @@ def main():
     )
     parser.add_argument(
         "--table",
-        default="showtimes_v2",
-        help="Tên bảng đích trong CSDL (mặc định: showtimes_v2)",
+        default="showtimes",
+        help="Tên bảng đích trong CSDL (mặc định: showtimes)",
     )
     parser.add_argument(
         "--brief",

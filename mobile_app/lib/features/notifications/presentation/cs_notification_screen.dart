@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 
-
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
+import 'package:mobile_app/core/utils/room_utils.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
 import 'package:mobile_app/core/widgets/cs_status_tag.dart';
 import 'package:mobile_app/core/network/api_client.dart';
 
-/// Hiện popup thông báo nhỏ, bật ra từ góc trên ngay dưới icon chuông.
-///
-/// [anchorContext] là context của icon chuông — dùng để canh vị trí popup
-/// và mũi tên chỉ đúng vào chuông. Nếu null, popup nằm góc trên bên phải.
+/// Hiện popup thông báo Bàn giao ca & Sự cố rạp nhỏ, bật ra từ icon chuông góc trên bên phải.
 Future<void> showCSNotificationPopover(
   BuildContext context, {
   BuildContext? anchorContext,
@@ -69,8 +66,8 @@ class _CSNotificationPopover extends StatefulWidget {
 }
 
 class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
-  List<dynamic> _alerts = [];
-  // state
+  List<dynamic> _incidents = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -79,26 +76,20 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
   }
 
   Future<void> _loadData() async {
-    final alertsFuture = ApiClient.fetchAlerts();
-    final incidentsFuture = ApiClient.getIncidents(limit: 50);
+    // Chỉ tải danh sách sự cố & bàn giao ca chưa xử lý
+    final incidents = await ApiClient.getIncidents(status: 'open', limit: 50);
 
-    final results = await Future.wait([alertsFuture, incidentsFuture]);
-    final alerts = results[0];
-    final incidents = results[1];
-
-    final combined = <dynamic>[...alerts, ...incidents];
-    
-    // Sort combined list descending
-    combined.sort((a, b) {
-      final ta = a['timestamp'] ?? a['created_at'] ?? '';
-      final tb = b['timestamp'] ?? b['created_at'] ?? '';
+    // Sort descending by created_at
+    incidents.sort((a, b) {
+      final ta = a['created_at'] ?? a['timestamp'] ?? '';
+      final tb = b['created_at'] ?? b['timestamp'] ?? '';
       return tb.compareTo(ta);
     });
 
     if (mounted) {
       setState(() {
-        _alerts = combined;
-        // loaded
+        _incidents = incidents;
+        _isLoading = false;
       });
     }
   }
@@ -109,9 +100,8 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
     final onViewAll = widget.onViewAll;
     final media = MediaQuery.of(context);
     final screenWidth = media.size.width;
-    final panelWidth = (screenWidth - 24).clamp(0.0, 320.0);
+    final panelWidth = (screenWidth - 24).clamp(0.0, 340.0);
 
-    // Vị trí mặc định: góc trên bên phải.
     double top = media.padding.top + 56;
     double right = 12;
     double arrowRight = 22;
@@ -119,7 +109,6 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
     if (anchor != null) {
       top = anchor.bottom + 2;
       right = (screenWidth - anchor.right).clamp(8.0, screenWidth);
-      // Mũi tên canh giữa icon chuông.
       arrowRight = (anchor.width / 2 - 7).clamp(12.0, panelWidth - 24);
     }
 
@@ -156,23 +145,23 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 8, 4, 0),
+                        padding: const EdgeInsets.fromLTRB(14, 10, 4, 4),
                         child: Row(
                           children: [
                             const Text(
-                              'Thông báo mới',
-                              style: TextStyle(fontWeight: FontWeight.w700),
+                              'Bàn giao ca & Sự cố',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                             ),
                             const SizedBox(width: 7),
                             CSStatusTag(
-                              text: '${_alerts.length}',
-                              color: CSAppColors.danger,
+                              text: '${_incidents.length}',
+                              color: CSAppColors.warning,
                             ),
                             const Spacer(),
                             if (onViewAll != null)
                               TextButton(
                                 onPressed: onViewAll,
-                                child: const Text('Xem tất cả'),
+                                child: const Text('Xem tất cả', style: TextStyle(fontSize: 11)),
                               ),
                             IconButton(
                               tooltip: 'Đóng',
@@ -183,18 +172,35 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
                           ],
                         ),
                       ),
+                      const Divider(height: 1),
                       Flexible(
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-                          itemCount: _alerts.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            return CSNotificationItemView(
-                              notification: _alerts[index],
-                            );
-                          },
-                        ),
+                        child: _isLoading
+                            ? const Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Center(child: CircularProgressIndicator()),
+                              )
+                            : _incidents.isEmpty
+                                ? const Padding(
+                                    padding: EdgeInsets.all(20),
+                                    child: Center(
+                                      child: Text(
+                                        'Không có sự cố nào tồn đọng từ ca trước',
+                                        style: TextStyle(color: CSAppColors.muted, fontSize: 11),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    shrinkWrap: true,
+                                    padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+                                    itemCount: _incidents.length,
+                                    separatorBuilder: (_, _) => const Divider(height: 1),
+                                    itemBuilder: (context, index) {
+                                      return CSHandoverIncidentItemView(
+                                        incident: _incidents[index],
+                                      );
+                                    },
+                                  ),
                       ),
                     ],
                   ),
@@ -223,8 +229,7 @@ class _ArrowPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Trang danh sách đầy đủ (mở từ "Xem tất cả" hoặc Cài đặt).
-/// Không tự vẽ bottom nav — HomeShell đã có thanh nav dùng chung.
+/// Màn hình danh sách sự cố bàn giao ca đầy đủ
 class CSNotificationScreen extends StatefulWidget {
   const CSNotificationScreen({super.key});
 
@@ -233,8 +238,8 @@ class CSNotificationScreen extends StatefulWidget {
 }
 
 class _CSNotificationScreenState extends State<CSNotificationScreen> {
-  List<dynamic> _alerts = [];
-  // state
+  List<dynamic> _incidents = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -243,26 +248,19 @@ class _CSNotificationScreenState extends State<CSNotificationScreen> {
   }
 
   Future<void> _loadData() async {
-    final alertsFuture = ApiClient.fetchAlerts();
-    final incidentsFuture = ApiClient.getIncidents(limit: 50);
+    setState(() => _isLoading = true);
+    final incidents = await ApiClient.getIncidents(status: 'open', limit: 50);
 
-    final results = await Future.wait([alertsFuture, incidentsFuture]);
-    final alerts = results[0];
-    final incidents = results[1];
-
-    final combined = <dynamic>[...alerts, ...incidents];
-    
-    // Sort combined list descending
-    combined.sort((a, b) {
-      final ta = a['timestamp'] ?? a['created_at'] ?? '';
-      final tb = b['timestamp'] ?? b['created_at'] ?? '';
+    incidents.sort((a, b) {
+      final ta = a['created_at'] ?? a['timestamp'] ?? '';
+      final tb = b['created_at'] ?? b['timestamp'] ?? '';
       return tb.compareTo(ta);
     });
 
     if (mounted) {
       setState(() {
-        _alerts = combined;
-        // loaded
+        _incidents = incidents;
+        _isLoading = false;
       });
     }
   }
@@ -271,94 +269,132 @@ class _CSNotificationScreenState extends State<CSNotificationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          children: [
-            const CSScreenHeader(
-              title: 'Thông báo',
-              subtitle: 'Tất cả thông báo trong ca',
-            ),
-            CSAppCard(
-              child: Column(
-                children: [
-                  for (var i = 0; i < _alerts.length; i++) ...[
-                    if (i > 0) const Divider(),
-                    CSNotificationItemView(
-                      notification: _alerts[i],
-                    ),
-                  ],
-                ],
+        child: RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            children: [
+              const CSScreenHeader(
+                title: 'Bàn giao ca & Sự cố',
+                subtitle: 'Các sự cố, trục trặc cơ sở vật chất từ ca trước',
               ),
-            ),
-          ],
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_incidents.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(
+                    child: Text(
+                      'Tất cả sự cố đã được giải quyết!\nKhông có ghi chú bàn giao tồn đọng.',
+                      style: TextStyle(color: CSAppColors.muted),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
+              else
+                CSAppCard(
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < _incidents.length; i++) ...[
+                        if (i > 0) const Divider(),
+                        CSHandoverIncidentItemView(
+                          incident: _incidents[i],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class CSNotificationItemView extends StatelessWidget {
-  final dynamic notification;
+class CSHandoverIncidentItemView extends StatelessWidget {
+  final dynamic incident;
 
-  const CSNotificationItemView({
+  const CSHandoverIncidentItemView({
     super.key,
-    required this.notification,
+    required this.incident,
   });
 
   @override
   Widget build(BuildContext context) {
-    String title = 'Thông báo hệ thống';
-    String detail = '';
-    
-    // Check if it's an incident vs AI alert
-    if (notification.containsKey('category')) {
-      // It's an incident
-      title = notification['title'] ?? 'Sự cố mới';
-      detail = notification['description'] ?? 'Không có mô tả';
-    } else {
-      // It's an AI alert
-      if (notification['alert_type'] == 'damaged_seat') {
-        title = 'Báo cáo sự cố ghế';
-        detail = 'Ghế ${notification['seat_id']} tại phòng ${notification['room_id']} cần sửa chữa.';
-      } else if (notification['alert_type'] == 'over_capacity') {
-        title = 'Cảnh báo vượt tải';
-        detail = 'Phòng ${notification['room_id']} vượt quá sức chứa.';
-      } else if (notification['alert_type'] == 'illegal_occupant') {
-        title = 'Khách ngồi sai ghế';
-        detail = 'Phát hiện khách ngồi sai ghế tại ${notification['seat_id']}.';
-      } else if (notification['alert_type'] == 'missing_guest') {
-        title = 'Ghế trống bất thường';
-        detail = 'Ghế ${notification['seat_id']} trống nhưng đã có vé.';
-      }
-    }
+    final title = incident['title'] ?? 'Sự cố phòng chiếu';
+    final desc = incident['description'] ?? 'Không có mô tả chi tiết';
+    final rawRoom = incident['room_id'] ?? incident['room'] ?? '';
+    final room = formatRoomName(rawRoom.toString());
+    final seats = incident['seat_id'] ?? incident['seats'] ?? '';
+    final reporter = incident['reporter_name'] ?? incident['created_by'] ?? 'Nhân viên ca trước';
 
-    final dateStr = notification['timestamp'] ?? notification['created_at'] ?? '';
+    final dateStr = incident['created_at'] ?? incident['timestamp'] ?? '';
     final date = DateTime.tryParse(dateStr)?.toLocal();
-    final timeStr = date != null ? '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} - ${date.day}/${date.month}/${date.year}' : '';
+    final timeStr = date != null
+        ? '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} · ${date.day}/${date.month}/${date.year}'
+        : '';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 9),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            detail,
-            style: const TextStyle(
-              color: CSAppColors.muted,
-              fontSize: 11,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: CSAppColors.warning.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
             ),
+            child: const Icon(Icons.handyman_outlined, color: CSAppColors.warning, size: 18),
           ),
-          const SizedBox(height: 5),
-          Text(
-            timeStr,
-            style: const TextStyle(
-              color: CSAppColors.muted,
-              fontSize: 9,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ),
+                    const CSStatusTag(text: 'CHỜ XỬ LÝ', color: CSAppColors.warning),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                if (room.isNotEmpty || seats.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      'Vị trí: ${rawRoom.toString().isNotEmpty ? room : ''}${seats.isNotEmpty ? ' · Ghế $seats' : ''}',
+                      style: const TextStyle(color: CSAppColors.primary, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                Text(
+                  desc,
+                  style: const TextStyle(color: CSAppColors.muted, fontSize: 11),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      'Bàn giao bởi: $reporter',
+                      style: const TextStyle(color: CSAppColors.muted, fontSize: 10, fontStyle: FontStyle.italic),
+                    ),
+                    const Spacer(),
+                    Text(
+                      timeStr,
+                      style: const TextStyle(color: CSAppColors.muted, fontSize: 9),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],

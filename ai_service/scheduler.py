@@ -249,7 +249,7 @@ def load_movie_rows(conn) -> list:
     return [dict(zip(cols, r)) for r in rows]
 
 
-ALLOWED_TABLES = frozenset({"showtimes", "showtimes_v2"})
+ALLOWED_TABLES = frozenset({"showtimes"})
 
 
 def validate_table_name(table_name: str) -> str:
@@ -262,7 +262,7 @@ def validate_table_name(table_name: str) -> str:
     return table_name
 
 
-def day_has_showtimes(conn, day: date, table_name: str = "showtimes_v2") -> bool:
+def day_has_showtimes(conn, day: date, table_name: str = "showtimes") -> bool:
     """Kiểm tra ngày `day` đã có bất kỳ suất chiếu nào chưa (kể cả đã hủy).
     True nếu > 0 (kích hoạt luật đóng băng không ghi đè)."""
     validate_table_name(table_name)
@@ -273,7 +273,7 @@ def day_has_showtimes(conn, day: date, table_name: str = "showtimes_v2") -> bool
     return count > 0
 
 
-def persist_day(conn, day: date, day_schedule: dict, created_at_iso: str, cfg: SchedulerConfig = None, table_name: str = "showtimes_v2") -> int:
+def persist_day(conn, day: date, day_schedule: dict, created_at_iso: str, cfg: SchedulerConfig = None, table_name: str = "showtimes") -> int:
     """Ghi toàn bộ lịch chiếu của 1 ngày vào SQLite trong đúng 1 transaction duy nhất.
     Nếu có bất kỳ lỗi nào xảy ra (kể cả vi phạm UNIQUE), rollback 100% không để lại dữ liệu dở dang.
     """
@@ -309,7 +309,7 @@ def persist_day(conn, day: date, day_schedule: dict, created_at_iso: str, cfg: S
         raise exc
 
 
-def run_for_day(conn, day: date, rooms: list, cfg: SchedulerConfig = None, write: bool = False, table_name: str = "showtimes_v2") -> dict:
+def run_for_day(conn, day: date, rooms: list, cfg: SchedulerConfig = None, write: bool = False, table_name: str = "showtimes") -> dict:
     """Điều phối sinh lịch cho 1 ngày theo 4 trạng thái:
     - 'skipped': Ngày đã có suất chiếu trong CSDL (bảo vệ đóng băng)
     - 'empty': Không có phim nào đủ điều kiện khởi chiếu

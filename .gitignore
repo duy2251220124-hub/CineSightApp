@@ -21,3 +21,10 @@ reports/*.log
 tools/qr_samples/
 mobile_app/test_hive_dir/
 
+
+# Khóa ký token phiên đăng nhập (không đẩy lên Git)
+ai_service/.auth_secret
+ai_service/backups/
+
+# Scratch directory
+scratch/

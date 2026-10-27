@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/core/utils/room_utils.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
@@ -21,87 +22,41 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
   bool _isLoading = true;
   String _selectedRoomFilter = 'all';
   String _searchQuery = '';
+  late DateTime _selectedDate;
   List<Map<String, dynamic>> _showtimes = [];
 
-  static List<Map<String, dynamic>> _buildFallbackShowtimes() {
+  static String _toDateStr(DateTime dt) {
+    return '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  static String _formatDisplayDate(DateTime dt) {
     final now = DateTime.now();
-    final dateStr =
-        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(dt.year, dt.month, dt.day);
+    final diff = target.difference(today).inDays;
 
-    final Map<String, List<Map<String, dynamic>>> schedules = {
-      'room1': [
-        {'start': '08:30', 'end': '10:15', 'duration': 105, 'movie': '2DDUB Crayon Shinchan'},
-        {'start': '10:25', 'end': '12:10', 'duration': 105, 'movie': '2DDUB Crayon Shinchan'},
-        {'start': '12:20', 'end': '14:05', 'duration': 105, 'movie': '2DDUB Crayon Shinchan'},
-        {'start': '14:15', 'end': '16:00', 'duration': 105, 'movie': '2DDUB Crayon Shinchan'},
-        {'start': '16:10', 'end': '17:55', 'duration': 105, 'movie': '2DDUB Crayon Shinchan'},
-        {'start': '18:05', 'end': '19:50', 'duration': 105, 'movie': '2DDUB Crayon Shinchan'},
-        {'start': '20:00', 'end': '22:00', 'duration': 120, 'movie': 'Spider-Man: Brand New Day'},
-        {'start': '22:10', 'end': '00:10', 'duration': 120, 'movie': 'Spider-Man: Brand New Day'},
-      ],
-      'room2': [
-        {'start': '08:30', 'end': '10:30', 'duration': 120, 'movie': 'Spider-Man: Brand New Day'},
-        {'start': '10:40', 'end': '12:40', 'duration': 120, 'movie': 'The Odyssey'},
-        {'start': '12:50', 'end': '14:50', 'duration': 120, 'movie': 'The Odyssey'},
-        {'start': '15:00', 'end': '16:50', 'duration': 110, 'movie': 'Insidious: Out Of The Dark'},
-        {'start': '17:00', 'end': '18:50', 'duration': 110, 'movie': 'Insidious: Out Of The Dark'},
-        {'start': '19:00', 'end': '20:50', 'duration': 110, 'movie': 'Insidious: Out Of The Dark'},
-        {'start': '21:00', 'end': '22:50', 'duration': 110, 'movie': 'Insidious: Out Of The Dark'},
-      ],
-      'room3': [
-        {'start': '08:30', 'end': '10:20', 'duration': 110, 'movie': 'Nghỉ Hè Sợ Nghỉ'},
-        {'start': '10:30', 'end': '12:20', 'duration': 110, 'movie': 'Nghỉ Hè Sợ Nghỉ'},
-        {'start': '12:30', 'end': '14:20', 'duration': 110, 'movie': 'Nghỉ Hè Sợ Nghỉ'},
-        {'start': '14:30', 'end': '16:20', 'duration': 110, 'movie': 'Nghỉ Hè Sợ Nghỉ'},
-        {'start': '16:30', 'end': '18:20', 'duration': 110, 'movie': 'Nghỉ Hè Sợ Nghỉ'},
-        {'start': '18:30', 'end': '20:20', 'duration': 110, 'movie': 'Nghỉ Hè Sợ Nghỉ'},
-        {'start': '20:30', 'end': '22:15', 'duration': 105, 'movie': "The Djinn's Curse"},
-        {'start': '22:25', 'end': '00:10', 'duration': 105, 'movie': "The Djinn's Curse"},
-      ],
-      'room4': [
-        {'start': '08:30', 'end': '10:20', 'duration': 110, 'movie': 'Insidious: Out Of The Dark'},
-        {'start': '10:30', 'end': '12:25', 'duration': 115, 'movie': '(Rerun 2026) One Piece Film: Red'},
-        {'start': '12:35', 'end': '14:20', 'duration': 105, 'movie': "The Djinn's Curse"},
-        {'start': '14:30', 'end': '16:20', 'duration': 110, 'movie': 'The End Of Oasis'},
-        {'start': '16:30', 'end': '18:15', 'duration': 105, 'movie': '2DDUB Paw Patrol'},
-        {'start': '18:25', 'end': '20:10', 'duration': 105, 'movie': '2DDUB Crayon Shinchan'},
-        {'start': '20:20', 'end': '22:10', 'duration': 110, 'movie': 'Whistle'},
-        {'start': '22:20', 'end': '00:10', 'duration': 110, 'movie': 'Whistle'},
-      ],
-    };
-
-    final List<Map<String, dynamic>> result = [];
-    schedules.forEach((roomId, shows) {
-      final roomNum = roomId.replaceAll('room', '');
-      for (final s in shows) {
-        final showId = '${dateStr}T${s['start']}';
-        result.add({
-          'id': showId,
-          'show_id': showId,
-          'room_id': roomId,
-          'room_name': 'Phòng chiếu $roomNum',
-          'movie_name': s['movie'],
-          'start_time': s['start'],
-          'end_time': s['end'],
-          'duration_minutes': s['duration'],
-          'break_minutes': 10,
-          'date': dateStr,
-        });
-      }
-    });
-    return result;
+    final dmy =
+        '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+    if (diff == 0) return 'Hôm nay, $dmy';
+    if (diff == -1) return 'Hôm qua, $dmy';
+    if (diff == 1) return 'Ngày mai, $dmy';
+    return 'Ngày $dmy';
   }
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _selectedDate = DateTime(now.year, now.month, now.day);
     _loadShowtimes();
   }
 
   Future<void> _loadShowtimes() async {
-    final remote = await ApiClient.fetchShowtimes();
-    if (!mounted) return;
-    if (remote.isNotEmpty) {
+    setState(() => _isLoading = true);
+    final dateStr = _toDateStr(_selectedDate);
+    try {
+      final remote = await ApiClient.fetchShowtimes(date: dateStr);
+      if (!mounted) return;
       setState(() {
         _showtimes = remote.map<Map<String, dynamic>>((item) {
           final m = Map<String, dynamic>.from(item as Map);
@@ -110,11 +65,37 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
         }).toList();
         _isLoading = false;
       });
-    } else {
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
-        _showtimes = _buildFallbackShowtimes();
+        _showtimes = [];
         _isLoading = false;
       });
+    }
+  }
+
+  void _selectDate(DateTime newDate) {
+    final normalized = DateTime(newDate.year, newDate.month, newDate.day);
+    if (_toDateStr(normalized) == _toDateStr(_selectedDate)) return;
+    setState(() {
+      _selectedDate = normalized;
+    });
+    _loadShowtimes();
+  }
+
+  Future<void> _pickCustomDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(now.year - 1, 1, 1),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      helpText: 'CHỌN NGÀY CHIẾU PHIM',
+      cancelText: 'Hủy',
+      confirmText: 'Xem lịch',
+    );
+    if (picked != null) {
+      _selectDate(picked);
     }
   }
 
@@ -126,7 +107,23 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final selectedDateStr = _toDateStr(_selectedDate);
+    final isYesterday = selectedDateStr == _toDateStr(yesterday);
+    final isToday = selectedDateStr == _toDateStr(today);
+    final isTomorrow = selectedDateStr == _toDateStr(tomorrow);
+    final isCustomDate = !isYesterday && !isToday && !isTomorrow;
+
     final filtered = _showtimes.where((s) {
+      // Đảm bảo chỉ hiển thị đúng ngày đang chọn
+      final itemDate = (s['date'] ?? (s['show_id']?.toString().split('T').first ?? '')).toString();
+      if (itemDate.isNotEmpty && itemDate != selectedDateStr) {
+        return false;
+      }
       if (_selectedRoomFilter != 'all' && s['room_id'] != _selectedRoomFilter) {
         return false;
       }
@@ -140,22 +137,102 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
     }).toList();
 
     final roomFilters = [
-      {'id': 'all', 'label': 'Tất cả (4 phòng)'},
-      {'id': 'room1', 'label': 'Phòng 1'},
-      {'id': 'room2', 'label': 'Phòng 2'},
-      {'id': 'room3', 'label': 'Phòng 3'},
-      {'id': 'room4', 'label': 'Phòng 4'},
+      {'id': 'all', 'label': 'Tất cả phòng'},
+      {'id': 'room1', 'label': 'Phòng chiếu số 1'},
+      {'id': 'room2', 'label': 'Phòng chiếu số 2'},
+      {'id': 'room3', 'label': 'Phòng chiếu số 3'},
+      {'id': 'room4', 'label': 'Phòng chiếu số 4'},
     ];
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            const CSScreenHeader(
+            CSScreenHeader(
               title: 'Lịch chiếu phim',
-              subtitle: 'Mở cửa 08:30 · Phim 1h45p–2h00p · Nghỉ 10p',
-              trailingIcon: Icons.schedule,
+              subtitle: '${_formatDisplayDate(_selectedDate)} · ${filtered.length} suất chiếu',
+              trailingIcon: Icons.calendar_month_outlined,
+              onTrailing: _pickCustomDate,
             ),
+
+            // Thanh chọn Ngày (Hôm qua / Hôm nay / Ngày mai / Chọn lịch)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: SizedBox(
+                height: 36,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    ChoiceChip(
+                      label: Text(
+                        'Hôm qua (${yesterday.day.toString().padLeft(2, '0')}/${yesterday.month.toString().padLeft(2, '0')})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isYesterday ? Colors.white : CSAppColors.muted,
+                        ),
+                      ),
+                      selected: isYesterday,
+                      selectedColor: CSAppColors.primary,
+                      backgroundColor: CSAppColors.surface,
+                      onSelected: (_) => _selectDate(yesterday),
+                    ),
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: Text(
+                        'Hôm nay (${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isToday ? Colors.white : CSAppColors.muted,
+                        ),
+                      ),
+                      selected: isToday,
+                      selectedColor: CSAppColors.primary,
+                      backgroundColor: CSAppColors.surface,
+                      onSelected: (_) => _selectDate(today),
+                    ),
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: Text(
+                        'Ngày mai (${tomorrow.day.toString().padLeft(2, '0')}/${tomorrow.month.toString().padLeft(2, '0')})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isTomorrow ? Colors.white : CSAppColors.muted,
+                        ),
+                      ),
+                      selected: isTomorrow,
+                      selectedColor: CSAppColors.primary,
+                      backgroundColor: CSAppColors.surface,
+                      onSelected: (_) => _selectDate(tomorrow),
+                    ),
+                    const SizedBox(width: 6),
+                    ActionChip(
+                      avatar: Icon(
+                        Icons.event_outlined,
+                        size: 14,
+                        color: isCustomDate ? Colors.white : CSAppColors.primary,
+                      ),
+                      label: Text(
+                        isCustomDate
+                            ? '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}'
+                            : 'Chọn ngày khác',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isCustomDate ? Colors.white : CSAppColors.muted,
+                        ),
+                      ),
+                      backgroundColor: isCustomDate ? CSAppColors.primary : CSAppColors.surface,
+                      onPressed: _pickCustomDate,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: TextField(
@@ -199,65 +276,100 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        final s = filtered[index];
-                        final movieName = s['movie_name']?.toString() ?? 'Suất chiếu';
-                        final roomName = s['room_name']?.toString() ?? s['room_id']?.toString() ?? 'Phòng 1';
-                        final startTime = s['start_time']?.toString() ?? '08:30';
-                        final endTime = s['end_time']?.toString() ?? '10:15';
-                        final duration = (s['duration_minutes'] as int?) ?? 105;
-                        final breakMins = (s['break_minutes'] as int?) ?? 10;
-                        final showId = s['show_id']?.toString() ?? s['id']?.toString() ?? '';
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: CSAppCard(
-                            onTap: () => widget.onMovieSelected?.call(s),
+                  : filtered.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        movieName,
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    CSStatusTag(
-                                      text: '$startTime - $endTime',
-                                      color: CSAppColors.primary,
-                                    ),
-                                  ],
+                                const Icon(
+                                  Icons.event_busy_outlined,
+                                  size: 48,
+                                  color: CSAppColors.muted,
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 12),
                                 Text(
-                                  '$roomName · Thời lượng: ${_formatDuration(duration)} · Nghỉ chuyển suất: ${breakMins}p',
-                                  style: const TextStyle(
-                                    color: CSAppColors.muted,
-                                    fontSize: 11,
-                                  ),
+                                  'Không có suất chiếu nào trong ${_formatDisplayDate(_selectedDate).toLowerCase()}.',
+                                  style: const TextStyle(color: CSAppColors.muted, fontSize: 13),
+                                  textAlign: TextAlign.center,
                                 ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  'Mã suất: $showId',
-                                  style: const TextStyle(
-                                    color: CSAppColors.muted,
-                                    fontSize: 10,
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: _loadShowtimes,
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: const Text('Tải lại'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: CSAppColors.primary,
+                                    side: const BorderSide(color: CSAppColors.primary),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        );
-                      },
-                    ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadShowtimes,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final s = filtered[index];
+                              final movieName = s['movie_name']?.toString() ?? 'Suất chiếu';
+                              final roomName = formatRoomName(s['room_id']?.toString() ?? s['room_name']?.toString());
+                              final startTime = s['start_time']?.toString() ?? '08:30';
+                              final endTime = s['end_time']?.toString() ?? '10:15';
+                              final duration = (s['duration_minutes'] as int?) ?? 105;
+                              final breakMins = (s['break_minutes'] as int?) ?? 15;
+                              final showId = s['show_id']?.toString() ?? s['id']?.toString() ?? '';
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: CSAppCard(
+                                  onTap: () => widget.onMovieSelected?.call(s),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              movieName,
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          CSStatusTag(
+                                            text: '$startTime - $endTime',
+                                            color: CSAppColors.primary,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '$roomName · Thời lượng: ${_formatDuration(duration)} · Nghỉ chuyển suất: ${breakMins}p',
+                                        style: const TextStyle(
+                                          color: CSAppColors.muted,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'Mã suất: $showId',
+                                        style: const TextStyle(
+                                          color: CSAppColors.muted,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
             ),
           ],
         ),

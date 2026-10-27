@@ -5,6 +5,7 @@ import 'package:mobile_app/core/utils/time_format.dart';
 import 'package:mobile_app/core/models/scan_models.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
+import '../../../core/utils/room_utils.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
 import 'package:mobile_app/core/widgets/cs_status_tag.dart';
 
@@ -22,11 +23,7 @@ class CSScanHistoryScreen extends StatefulWidget {
 class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
   String _query = '';
 
-  String get _roomDisplayName {
-    final clean = widget.roomId.replaceAll('seats_config_', '');
-    final num = clean.replaceAll('room', '');
-    return num.isNotEmpty ? 'Phòng chiếu $num' : widget.roomId;
-  }
+  String get _roomDisplayName => formatRoomName(widget.roomId);
 
   void _confirmClearHistory() {
     showDialog(

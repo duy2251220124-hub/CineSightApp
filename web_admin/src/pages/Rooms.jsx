@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getRoomsConfig, getRoomSeats, getShowtimes, getTicketsList, clearTickets, getIncidents, API_BASE } from '../api/cineSightApi';
+import { getRoomsConfig, getRoomSeats, getShowtimes, getTicketsList, getIncidents, analyzeRoom, API_BASE } from '../api/cineSightApi';
 import '../styles/dashboard.css';
 
 export default function Rooms() {
@@ -11,8 +11,15 @@ export default function Rooms() {
   const [inspectRoom, setInspectRoom] = useState(null); // Phòng đang xem sơ đồ ghế
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [calibrationModal, setCalibrationModal] = useState(null); // Modal xem góc camera hiệu chuẩn
-  const [aiTestResult, setAiTestResult] = useState(null); // Kết quả AI test run
-  const [testingAiRoom, setTestingAiRoom] = useState(null); // Phòng đang chạy AI test
+  // Modal Chạy AI Camera thực tế của phòng
+  const [aiRunModal, setAiRunModal] = useState(null);
+  const [aiModalShows, setAiModalShows] = useState([]);
+  const [aiSelectedShowId, setAiSelectedShowId] = useState('');
+  const [aiImageFile, setAiImageFile] = useState(null);
+  const [aiImagePreview, setAiImagePreview] = useState(null);
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
+  const [aiError, setAiError] = useState(null);
 
   // 4 trạng thái màu ghế chuẩn:
   // - Màu xám: Trống (#1E293B)
@@ -102,20 +109,7 @@ export default function Rooms() {
     }
   };
 
-  // Làm trống toàn bộ ghế của phòng đang xem
-  const handleClearAllSeats = async () => {
-    if (!inspectRoom) return;
-    try {
-      await clearTickets(inspectRoom.room_id);
-      setOccupiedSeats(new Set());
-      setBrokenSeats(new Set());
-      setWarningSeats(new Set());
-    } catch {
-      setOccupiedSeats(new Set());
-      setBrokenSeats(new Set());
-      setWarningSeats(new Set());
-    }
-  };
+
 
   // Luân chuyển trạng thái ghế khi bấm: Trống -> Đã có người -> Trục trặc -> Cảnh báo -> Trống
   const toggleSeatStatus = (seatId) => {
@@ -219,21 +213,49 @@ export default function Rooms() {
     );
   };
 
-  // Chạy kiểm tra kết nối mô hình AI
-  const handleRunAiTest = (roomId, roomDisplayName) => {
-    setTestingAiRoom(roomId);
-    setAiTestResult(null);
-    setTimeout(() => {
-      setTestingAiRoom(null);
-      setAiTestResult({
-        roomId,
-        roomDisplayName,
-        engine: 'YOLOv8 Head Model',
-        status: 'KẾT NỐI SẴN SÀNG',
-        calibrationStatus: '136 ghế đã căn chỉnh tọa độ',
-        timestamp: new Date().toLocaleTimeString('vi-VN')
-      });
-    }, 600);
+  // Mở modal Chạy AI cho một phòng cụ thể
+  const handleOpenAiModal = async (roomId, roomDisplayName) => {
+    setAiRunModal({ roomId, name: roomDisplayName });
+    setAiAnalysisResult(null);
+    setAiError(null);
+    setAiImageFile(null);
+    setAiImagePreview(null);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const shows = await getShowtimes(roomId, today).catch(() => []);
+      setAiModalShows(shows || []);
+      if (shows && shows.length > 0) {
+        const activeShow = shows.find(s => s.show_id?.includes('19:00')) || shows[0];
+        setAiSelectedShowId(activeShow.show_id);
+      } else {
+        setAiSelectedShowId('');
+      }
+    } catch (e) {
+      console.error('Lỗi tải danh sách suất chiếu cho AI modal:', e);
+    }
+  };
+
+  // Thực thi phân tích ảnh camera bằng AI
+  const handleExecuteAi = async () => {
+    if (!aiRunModal) return;
+    if (!aiSelectedShowId) {
+      setAiError('Vui lòng chọn suất chiếu trước khi chạy phân tích AI.');
+      return;
+    }
+    if (!aiImageFile) {
+      setAiError('Vui lòng chọn file ảnh snapshot từ camera CCTV phòng chiếu.');
+      return;
+    }
+    setAiAnalyzing(true);
+    setAiError(null);
+    try {
+      const res = await analyzeRoom(aiRunModal.roomId, aiSelectedShowId, aiImageFile);
+      setAiAnalysisResult(res);
+    } catch (e) {
+      setAiError(e.response?.data?.error || e.message || 'Lỗi khi gọi AI phân tích.');
+    } finally {
+      setAiAnalyzing(false);
+    }
   };
 
   const getRoomDisplayName = (roomId) => {
@@ -330,50 +352,6 @@ export default function Rooms() {
         </div>
       </header>
 
-      {/* 2. KẾT QUẢ AI TEST RUN BANNER (NẾU VỪA CHẠY THỬ) */}
-      {aiTestResult && (
-        <div style={{
-          background: '#EFF6FF',
-          border: '1px solid #BFDBFE',
-          borderRadius: 8,
-          padding: '12px 18px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0,
-          boxShadow: '0 1px 3px rgba(37, 99, 235, 0.1)'
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{
-                background: '#2563EB',
-                color: '#FFFFFF',
-                fontSize: 11,
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 4
-              }}>
-                KIỂM TRA KẾT NỐI AI
-              </span>
-              <span style={{ fontWeight: 800, fontSize: 13.5, color: '#1E40AF' }}>
-                MÔ HÌNH PHÁT HIỆN NGƯỜI: {aiTestResult.roomDisplayName.toUpperCase()} ({aiTestResult.timestamp})
-              </span>
-            </div>
-            <div style={{ fontSize: 12.5, color: '#2563EB', marginTop: 4, display: 'flex', gap: 18, fontWeight: 500 }}>
-              <span>Trạng thái: <strong style={{ color: '#1E40AF' }}>{aiTestResult.status}</strong></span>
-              <span>Động cơ AI: <strong style={{ color: '#1E40AF' }}>{aiTestResult.engine}</strong></span>
-              <span>Tọa độ đa giác: <strong style={{ color: '#1E40AF' }}>{aiTestResult.calibrationStatus}</strong></span>
-            </div>
-          </div>
-          <button
-            onClick={() => setAiTestResult(null)}
-            style={{ background: 'transparent', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: 18, fontWeight: 700 }}
-            title="Đóng thông báo"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* 3. KHỐI 4 THẺ TRUNG TÂM VẬN HÀNH PHÒNG CHIẾU (2 TRÊN 2 DƯỚI - 2x2 GRID) */}
       <div style={{
@@ -387,7 +365,6 @@ export default function Rooms() {
           const roomObj = rooms.find(r => r.room_id === rid) || { total_seats: 136, is_calibrated: true };
           const statusObj = getRoomStatus(rid);
           const badgeStyle = getStatusBadgeStyle(statusObj.type);
-          const isTesting = testingAiRoom === rid;
 
           return (
             <div
@@ -576,27 +553,30 @@ export default function Rooms() {
                   Góc Camera AI
                 </button>
 
-                {/* Nút 3: Chạy thử phát hiện AI */}
+                {/* Nút 3: Chạy AI camera thực tế */}
                 <button
-                  onClick={() => handleRunAiTest(rid, roomDisplayName)}
-                  disabled={isTesting}
+                  onClick={() => handleOpenAiModal(rid, roomDisplayName)}
                   style={{
                     flex: 1,
                     height: 36,
-                    background: '#DCFCE7',
-                    border: '1px solid #BBF7D0',
-                    color: '#15803D',
+                    background: '#2563EB',
+                    border: '1px solid #1D4ED8',
+                    color: '#FFFFFF',
                     borderRadius: 6,
                     fontSize: 12.5,
                     fontWeight: 700,
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#BBF7D0'; }}
-                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#DCFCE7'; }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#1D4ED8'; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#2563EB'; }}
                 >
-                  {isTesting ? 'Đang quét...' : 'Chạy thử AI'}
+                  ⚡ Chạy AI
                 </button>
               </div>
             </div>
@@ -683,12 +663,12 @@ export default function Rooms() {
                     </span>
                   </div>
 
-                  {/* HÀNG A: 8 ghế (A1 - A8) căn thẳng trên B2 - B9 */}
+                  {/* HÀNG A: 8 ghế (A8 - A1) căn thẳng trên B10 - B3 */}
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', width: 620 }}>
                     <span style={{ width: 20, fontSize: 10.5, fontWeight: 700, color: '#64748B', textAlign: 'center' }}>A</span>
                     <span style={{ width: 32 }} />
                     <span style={{ width: 32 }} />
-                    {Array.from({ length: 8 }, (_, idx) => renderSeatBtn(`A${idx + 1}`))}
+                    {Array.from({ length: 8 }, (_, idx) => renderSeatBtn(`A${8 - idx}`))}
                     <span style={{ width: 32 }} />
                     <span style={{ width: 32 }} />
                     <span style={{ width: 32 }} />
@@ -698,12 +678,12 @@ export default function Rooms() {
                     <span style={{ width: 20, fontSize: 10.5, fontWeight: 700, color: '#64748B', textAlign: 'center' }}>A</span>
                   </div>
 
-                  {/* CÁC HÀNG B ĐẾN J: 11 ghế mỗi hàng (B1-B11 ... J1-J11) */}
+                  {/* CÁC HÀNG B ĐẾN J: 11 ghế mỗi hàng (B11-B1 ... J11-J1) */}
                   {['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].map(r => (
                     <div key={r} style={{ display: 'flex', gap: 4, alignItems: 'center', width: 620 }}>
                       <span style={{ width: 20, fontSize: 10.5, fontWeight: 700, color: '#64748B', textAlign: 'center' }}>{r}</span>
                       <span style={{ width: 32 }} />
-                      {Array.from({ length: 11 }, (_, idx) => renderSeatBtn(`${r}${idx + 1}`))}
+                      {Array.from({ length: 11 }, (_, idx) => renderSeatBtn(`${r}${11 - idx}`))}
                       <span style={{ width: 32 }} />
                       <span style={{ width: 32 }} />
                       <span style={{ width: 32 }} />
@@ -712,22 +692,22 @@ export default function Rooms() {
                     </div>
                   ))}
 
-                  {/* HÀNG K: K1 - K11, 2 ô trống thẳng hàng L13-L14 (BỎ LỐI ĐI), K12, K13 */}
+                  {/* HÀNG K: K13 - K3, 2 ô trống thẳng hàng L4-L3 (BỎ LỐI ĐI), K2, K1 */}
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', width: 620 }}>
                     <span style={{ width: 20, fontSize: 10.5, fontWeight: 700, color: '#64748B', textAlign: 'center' }}>K</span>
                     <span style={{ width: 32 }} />
-                    {Array.from({ length: 11 }, (_, idx) => renderSeatBtn(`K${idx + 1}`))}
+                    {Array.from({ length: 11 }, (_, idx) => renderSeatBtn(`K${13 - idx}`))}
                     <span style={{ width: 32 }} />
                     <span style={{ width: 32 }} />
-                    {renderSeatBtn('K12')}
-                    {renderSeatBtn('K13')}
+                    {renderSeatBtn('K2')}
+                    {renderSeatBtn('K1')}
                     <span style={{ width: 20, fontSize: 10.5, fontWeight: 700, color: '#64748B', textAlign: 'center' }}>K</span>
                   </div>
 
-                  {/* HÀNG L: 16 ghế liền mạch L1 - L16 (BỎ KHOẢNG CÁCH GIỮA L12 VÀ L13) */}
+                  {/* HÀNG L: 16 ghế liền mạch L16 - L1 */}
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', width: 620 }}>
                     <span style={{ width: 20, fontSize: 10.5, fontWeight: 700, color: '#64748B', textAlign: 'center' }}>L</span>
-                    {Array.from({ length: 16 }, (_, idx) => renderSeatBtn(`L${idx + 1}`))}
+                    {Array.from({ length: 16 }, (_, idx) => renderSeatBtn(`L${16 - idx}`))}
                     <span style={{ width: 20, fontSize: 10.5, fontWeight: 700, color: '#64748B', textAlign: 'center' }}>L</span>
                   </div>
                 </div>
@@ -755,29 +735,10 @@ export default function Rooms() {
             </div>
 
             {/* Footer Modal */}
-            <div style={{ padding: '8px 18px', background: '#F8FAFC', borderTop: '1px solid #CBD5E1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button
-                onClick={handleClearAllSeats}
-                style={{
-                  background: '#FFFFFF',
-                  color: '#64748B',
-                  border: '1px solid #CBD5E1',
-                  padding: '6px 14px',
-                  borderRadius: 6,
-                  fontWeight: 600,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = '#EF4444'; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#FFFFFF'; e.currentTarget.style.color = '#64748B'; }}
-                title="Làm trống toàn bộ 136 ghế của phòng này"
-              >
-                ↺ Làm trống toàn bộ ghế
-              </button>
+            <div style={{ padding: '10px 18px', background: '#F8FAFC', borderTop: '1px solid #CBD5E1', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
               <button
                 onClick={() => setInspectRoom(null)}
-                style={{ background: 'var(--brand-blue)', color: '#FFFFFF', border: 'none', padding: '6px 16px', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                style={{ background: 'var(--brand-blue)', color: '#FFFFFF', border: 'none', padding: '6px 18px', borderRadius: 6, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
               >
                 Đóng
               </button>
@@ -881,6 +842,244 @@ export default function Rooms() {
           </div>
         </div>
       )}
+
+      {/* 5. MODAL CHẠY PHÂN TÍCH CAMERA AI THẬT */}
+      {aiRunModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(15, 23, 42, 0.5)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 20
+          }}
+          onClick={() => setAiRunModal(null)}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: 12,
+              border: '1px solid #CBD5E1',
+              width: 580,
+              maxWidth: '96vw',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div style={{ padding: '12px 20px', background: '#F8FAFC', borderBottom: '1px solid #CBD5E1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ color: '#2563EB' }}>⚡</span> CHẠY PHÂN TÍCH CAMERA AI: {aiRunModal.name}
+                </div>
+                <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                  Nạp ảnh snapshot CCTV để đối soát vị trí người ngồi thực tế với vé đã bán
+                </div>
+              </div>
+              <button
+                onClick={() => setAiRunModal(null)}
+                style={{ background: 'transparent', border: 'none', color: '#64748B', fontSize: 18, cursor: 'pointer', fontWeight: 700 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Thân Modal */}
+            <div style={{ padding: '16px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Chọn Suất Chiếu */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  1. CHỌN SUẤT CHIẾU ĐỐI SOÁT
+                </label>
+                <select
+                  value={aiSelectedShowId}
+                  onChange={e => setAiSelectedShowId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    border: '1px solid #CBD5E1',
+                    background: '#FFFFFF',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#0F172A',
+                    outline: 'none'
+                  }}
+                >
+                  {aiModalShows.length === 0 ? (
+                    <option value="">Không có suất chiếu hôm nay</option>
+                  ) : (
+                    aiModalShows.map(s => (
+                      <option key={s.show_id} value={s.show_id}>
+                        {s.start_time || s.show_id.split('T').pop()} - {s.movie_name || s.title_vi || 'Phim'} ({s.show_id})
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Nạp ảnh CCTV snapshot */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  2. NẠP ẢNH SNAPSHOT TỪ CAMERA CCTV
+                </label>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <label
+                    style={{
+                      background: '#EFF6FF',
+                      border: '1px solid #BFDBFE',
+                      color: '#2563EB',
+                      padding: '8px 16px',
+                      borderRadius: 6,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    📁 Chọn ảnh từ máy...
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setAiImageFile(file);
+                          setAiImagePreview(URL.createObjectURL(file));
+                          setAiAnalysisResult(null);
+                          setAiError(null);
+                        }
+                      }}
+                    />
+                  </label>
+                  <span style={{ fontSize: 12, color: aiImageFile ? '#0F172A' : '#94A3B8', fontWeight: aiImageFile ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {aiImageFile ? aiImageFile.name : 'Chưa chọn tệp ảnh (VD: CCTV_ROOM4_TEST_FRAME.jpg)'}
+                  </span>
+                </div>
+
+                {/* Preview ảnh nhỏ */}
+                {aiImagePreview && (
+                  <div style={{ marginTop: 10, height: 160, background: '#0F172A', borderRadius: 6, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #CBD5E1' }}>
+                    <img src={aiImagePreview} alt="Preview" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Thông báo lỗi nếu có */}
+              {aiError && (
+                <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, color: '#DC2626', fontSize: 12, fontWeight: 600 }}>
+                  ⚠️ {aiError}
+                </div>
+              )}
+
+              {/* Nút thực hiện chạy AI */}
+              <button
+                onClick={handleExecuteAi}
+                disabled={aiAnalyzing || !aiImageFile}
+                style={{
+                  width: '100%',
+                  padding: '10px 0',
+                  background: aiAnalyzing || !aiImageFile ? '#94A3B8' : '#2563EB',
+                  border: 'none',
+                  borderRadius: 6,
+                  color: '#FFFFFF',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: aiAnalyzing || !aiImageFile ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
+                }}
+              >
+                {aiAnalyzing ? '⏳ ĐANG PHÂN TÍCH HÌNH ẢNH CAMERA...' : '🚀 BẮT ĐẦU PHÂN TÍCH AI'}
+              </button>
+
+              {/* KẾT QUẢ PHÂN TÍCH */}
+              {aiAnalysisResult && (
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>KẾT QUẢ ĐỐI SOÁT AI:</span>
+                    <span style={{ color: '#2563EB' }}>Phát hiện {aiAnalysisResult.summary?.total_detected_people || 0} người</span>
+                  </div>
+
+                  {/* Tập A & Tập B */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12 }}>
+                    <div style={{ background: '#FFFFFF', padding: '8px 10px', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+                      <div style={{ color: '#64748B', fontWeight: 600, marginBottom: 2 }}>Tập A (Vé đã soát):</div>
+                      <div style={{ fontWeight: 700, color: '#16A34A' }}>
+                        {aiAnalysisResult.summary?.tap_A_from_app?.length > 0
+                          ? aiAnalysisResult.summary.tap_A_from_app.join(', ')
+                          : 'Chưa có vé nào'}
+                      </div>
+                    </div>
+                    <div style={{ background: '#FFFFFF', padding: '8px 10px', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+                      <div style={{ color: '#64748B', fontWeight: 600, marginBottom: 2 }}>Tập B (Camera thấy ngồi):</div>
+                      <div style={{ fontWeight: 700, color: '#2563EB' }}>
+                        {aiAnalysisResult.summary?.tap_B_from_camera?.length > 0
+                          ? aiAnalysisResult.summary.tap_B_from_camera.join(', ')
+                          : 'Không phát hiện người'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Chi tiết cảnh báo vi phạm */}
+                  {aiAnalysisResult.alerts?.illegal_occupants?.length > 0 && (
+                    <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
+                      <strong style={{ color: '#DC2626' }}>🚨 NGỒI KHÔNG CÓ VÉ (KHÁCH LẬU): </strong>
+                      <span style={{ color: '#991B1B', fontWeight: 700 }}>
+                        {aiAnalysisResult.alerts.illegal_occupants.join(', ')}
+                      </span>
+                    </div>
+                  )}
+
+                  {aiAnalysisResult.alerts?.missing_guests?.length > 0 && (
+                    <div style={{ background: '#FEFCE8', border: '1px solid #FEF08A', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
+                      <strong style={{ color: '#CA8A04' }}>⚠️ KHÁCH VẮNG MẶT / ĐI SAI GHẾ: </strong>
+                      <span style={{ color: '#854D0E', fontWeight: 700 }}>
+                        {aiAnalysisResult.alerts.missing_guests.join(', ')}
+                      </span>
+                    </div>
+                  )}
+
+                  {(!aiAnalysisResult.alerts?.illegal_occupants?.length && !aiAnalysisResult.alerts?.missing_guests?.length) && (
+                    <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 6, padding: '8px 12px', color: '#16A34A', fontSize: 12, fontWeight: 700 }}>
+                      ✅ TẤT CẢ KHỚP 100%! Vị trí người ngồi khớp chính xác với vé đã soát.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer Modal */}
+            <div style={{ padding: '10px 20px', background: '#F8FAFC', borderTop: '1px solid #CBD5E1', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                onClick={() => setAiRunModal(null)}
+                style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', padding: '6px 16px', borderRadius: 6, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

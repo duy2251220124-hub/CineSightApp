@@ -12,7 +12,14 @@ class ApiClient {
   static const String baseUrl = 'https://quill-device-deny.ngrok-free.dev';
 
   static Map<String, dynamic>? currentUser;
+  static String? authToken;
   static String? lastLoginError;
+
+  static void logout() {
+    currentUser = null;
+    authToken = null;
+    _dio.options.headers.remove('Authorization');
+  }
 
   static Future<bool> login(String username, String password) async {
     final cleanUser = username.trim();
@@ -28,6 +35,10 @@ class ApiClient {
       );
       if (response.statusCode == 200) {
         currentUser = response.data['user'];
+        authToken = response.data['token']?.toString();
+        if (authToken != null && authToken!.isNotEmpty) {
+          _dio.options.headers['Authorization'] = 'Bearer $authToken';
+        }
         lastLoginError = null;
         return true;
       }
