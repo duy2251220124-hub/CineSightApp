@@ -28,3 +28,7 @@ ai_service/backups/
 
 # Scratch directory
 scratch/
+
+# Video testing & sample extractions
+ai_service/test_videos/
+ai_service/video_samples_room3/
