@@ -6,6 +6,7 @@ import 'package:mobile_app/core/models/scan_models.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
 import '../../../core/utils/room_utils.dart';
+import '../../../core/network/api_client.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
 import 'package:mobile_app/core/widgets/cs_status_tag.dart';
 
@@ -22,6 +23,63 @@ class CSScanHistoryScreen extends StatefulWidget {
 
 class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
   String _query = '';
+  bool _isSyncing = false;
+
+  Future<void> _handleManualSync() async {
+    final pendingCount = HiveService.getPendingTicketsCount();
+    if (pendingCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Không có vé tồn đọng nào cần đồng bộ!'),
+          backgroundColor: CSAppColors.primary,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSyncing = true);
+    try {
+      final success = await ApiClient.syncTicketsToServer(widget.roomId, widget.showId);
+      final remaining = HiveService.getPendingTicketsCount();
+      if (!mounted) return;
+
+      if (success && remaining == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã đồng bộ thành công $pendingCount vé lên máy chủ!'),
+            backgroundColor: CSAppColors.success,
+          ),
+        );
+      } else if (remaining < pendingCount) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã đồng bộ được ${pendingCount - remaining} vé. Còn lại $remaining vé chờ.'),
+            backgroundColor: Colors.orange.shade800,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ApiClient.lastLoginError ?? 'Không thể gửi vé lên máy chủ. Vui lòng kiểm tra mạng hoặc Server URL!'),
+            backgroundColor: CSAppColors.danger,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi đồng bộ: $e'),
+            backgroundColor: CSAppColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
 
   String get _roomDisplayName => formatRoomName(widget.roomId);
 
@@ -101,6 +159,79 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
               trailingIcon: Icons.delete_sweep_outlined,
               onTrailing: _confirmClearHistory,
             ),
+            // Khối trạng thái đồng bộ vé tồn
+            Builder(builder: (context) {
+              final pendingCount = HiveService.getPendingTicketsCount();
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: pendingCount > 0 ? const Color(0xFF2E2215) : const Color(0xFF14241B),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: pendingCount > 0
+                          ? const Color(0xFFEAB308).withValues(alpha: 0.5)
+                          : const Color(0xFF22C55E).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        pendingCount > 0 ? Icons.cloud_off_outlined : Icons.cloud_done_outlined,
+                        color: pendingCount > 0 ? const Color(0xFFEAB308) : const Color(0xFF22C55E),
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              pendingCount > 0
+                                  ? 'Có $pendingCount vé lưu offline chưa gửi máy chủ'
+                                  : 'Toàn bộ vé đã được đồng bộ với máy chủ',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: pendingCount > 0 ? const Color(0xFFFEF08A) : const Color(0xFF86EFAC),
+                              ),
+                            ),
+                            Text(
+                              pendingCount > 0
+                                  ? 'Bấm nút bên cạnh để gửi ngay khi có mạng'
+                                  : 'Dữ liệu đã khớp với máy chủ thời gian thực',
+                              style: const TextStyle(fontSize: 11, color: CSAppColors.muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (pendingCount > 0)
+                        _isSyncing
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFEAB308),
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: _handleManualSync,
+                                icon: const Icon(Icons.sync, size: 14),
+                                label: const Text('Đồng bộ ngay',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 6),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: CSAppCard(

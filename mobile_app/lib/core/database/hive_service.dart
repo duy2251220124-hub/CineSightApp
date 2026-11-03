@@ -50,14 +50,64 @@ class HiveService {
   /// và để hiển thị màn "Lịch sử quét vé". Key = mã vé.
   static const String _historyBoxName = 'scan_history_box';
 
+  /// Hộp cài đặt cấu hình ứng dụng (Server URL, v.v.)
+  static const String _settingsBoxName = 'app_settings_box';
+
+  /// URL máy chủ mặc định (fallback khi chưa lưu cấu hình)
+  static const String defaultServerUrl = 'https://quill-device-deny.ngrok-free.dev';
+
   /// Khởi tạo Hive Database (Chạy 1 lần duy nhất khi mở App)
   static Future<void> init() async {
     // Khởi tạo engine lưu trữ trên điện thoại
     await Hive.initFlutter();
 
-    // Mở một cái "Hộp" (Bảng) để chứa danh sách vé
+    // Mở các "Hộp" để chứa dữ liệu
     await Hive.openBox<String>(_ticketBoxName);
     await Hive.openBox<String>(_historyBoxName);
+    await Hive.openBox<String>(_settingsBoxName);
+  }
+
+  /// Lấy địa chỉ máy chủ hiện tại
+  static String getServerUrl() {
+    try {
+      if (!Hive.isBoxOpen(_settingsBoxName)) return defaultServerUrl;
+      final box = Hive.box<String>(_settingsBoxName);
+      final saved = box.get('server_url');
+      if (saved != null && saved.trim().isNotEmpty) {
+        return saved.trim();
+      }
+    } catch (e) {
+      debugPrint('[HIVE] Error getting server url: $e');
+    }
+    return defaultServerUrl;
+  }
+
+  /// Cập nhật địa chỉ máy chủ
+  static Future<void> setServerUrl(String url) async {
+    try {
+      if (!Hive.isBoxOpen(_settingsBoxName)) {
+        await Hive.openBox<String>(_settingsBoxName);
+      }
+      final box = Hive.box<String>(_settingsBoxName);
+      var clean = url.trim();
+      if (clean.endsWith('/')) {
+        clean = clean.substring(0, clean.length - 1);
+      }
+      await box.put('server_url', clean);
+      debugPrint('[HIVE] Đã lưu Server URL mới: $clean');
+    } catch (e) {
+      debugPrint('[HIVE] Error setting server url: $e');
+    }
+  }
+
+  /// Đếm số lượng vé tồn đọng chưa được đồng bộ lên máy chủ
+  static int getPendingTicketsCount() {
+    try {
+      if (!Hive.isBoxOpen(_ticketBoxName)) return 0;
+      return Hive.box<String>(_ticketBoxName).length;
+    } catch (_) {
+      return 0;
+    }
   }
 
   /// Ghi lịch sử quét (key = mã vé nên mỗi vé chỉ có 1 bản ghi).

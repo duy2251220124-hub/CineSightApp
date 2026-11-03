@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -6,11 +7,13 @@ import '../../../core/database/hive_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/time_format.dart';
 import '../../../core/utils/show_id_utils.dart';
+
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/models/scan_models.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
 import 'package:mobile_app/features/scanner/presentation/widgets/cs_scan_result_view.dart';
 import 'package:mobile_app/features/scanner/presentation/cs_scan_history_screen.dart';
+
 import '../../../core/utils/room_utils.dart';
 
 class ScannerScreen extends StatefulWidget {
@@ -45,8 +48,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
   @override
   void initState() {
     super.initState();
-    _activeRoomId = widget.roomId.isNotEmpty ? widget.roomId : CSActiveShowtime.roomId;
-    _activeShowId = widget.showId.isNotEmpty ? widget.showId : CSActiveShowtime.showId;
+    _activeRoomId = widget.roomId.isNotEmpty
+        ? widget.roomId
+        : CSActiveShowtime.roomId;
+    _activeShowId = widget.showId.isNotEmpty
+        ? widget.showId
+        : CSActiveShowtime.showId;
     _activeMovieTitle = CSActiveShowtime.movieTitle;
     if (_activeShowId == 'all') {
       _isAutoMode = true;
@@ -80,20 +87,122 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
+  static String _toDateStr(DateTime dt) {
+    return '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  static DateTime? _parseShowDateTime(String dateStr, String timeStr) {
+    try {
+      final tParts = timeStr.trim().split(':');
+      final dParts = dateStr.trim().split('-');
+      if (tParts.length >= 2 && dParts.length >= 3) {
+        return DateTime(
+          int.parse(dParts[0]),
+          int.parse(dParts[1]),
+          int.parse(dParts[2]),
+          int.parse(tParts[0]),
+          int.parse(tParts[1]),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Trả về trạng thái ưu tiên của suất chiếu:
+  /// 0: Đang chiếu / Đang soát vé (Ưu tiên số 1 - đưa lên đầu danh sách)
+  /// 1: Sắp chiếu hôm nay (Xếp theo thời gian tăng dần)
+  /// 2: Đã kết thúc hôm nay (Đưa xuống cuối danh sách)
+  static int _getShowtimePriority(Map<String, dynamic> s, DateTime now) {
+    final date =
+        (s['date'] ?? (s['show_id']?.toString().split('T').first ?? ''))
+            .toString();
+    final startTime =
+        (s['start_time'] ?? (s['show_id']?.toString().split('T').last ?? ''))
+            .toString();
+    final endTime = (s['end_time'] ?? '').toString();
+
+    final startDt = _parseShowDateTime(date, startTime);
+    if (startDt == null) return 1;
+
+    final endDt =
+        _parseShowDateTime(date, endTime) ??
+        startDt.add(const Duration(minutes: 110));
+
+    // Khung giờ soát vé: 20 phút trước khi chiếu đến khi hết phim
+    final checkInStart = startDt.subtract(const Duration(minutes: 20));
+    final checkInEnd = endDt.add(const Duration(minutes: 10));
+
+    if (now.isAfter(checkInStart) && now.isBefore(checkInEnd)) {
+      return 0; // Đang chiếu / Đang soát vé
+    }
+    if (now.isBefore(checkInStart)) {
+      return 1; // Sắp chiếu
+    }
+    return 2; // Đã kết thúc
+  }
+
+  static String _formatPosterUrl(String path) {
+    if (path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final cleanPath = path.startsWith("/") ? path : "/$path";
+    return "https://image.tmdb.org/t/p/w200$cleanPath";
+  }
+
+  static List<Map<String, dynamic>> _sortShowtimes(
+    List<Map<String, dynamic>> list,
+    DateTime now,
+  ) {
+    final sorted = List<Map<String, dynamic>>.from(list);
+    sorted.sort((a, b) {
+      final pA = _getShowtimePriority(a, now);
+      final pB = _getShowtimePriority(b, now);
+      if (pA != pB) {
+        return pA.compareTo(pB);
+      }
+      final sA = (a['start_time'] ?? a['show_id'] ?? '').toString();
+      final sB = (b['start_time'] ?? b['show_id'] ?? '').toString();
+      return sA.compareTo(sB);
+    });
+    return sorted;
+  }
+
   Future<void> _loadShowtimes({VoidCallback? onDone}) async {
     setState(() => _isLoadingShowtimes = true);
+    final now = DateTime.now();
+    final todayStr = _toDateStr(now);
     try {
-      final list = await ApiClient.fetchShowtimes(roomId: _activeRoomId);
+      // 1. Chỉ gọi API lấy đúng các suất chiếu ngày hôm nay
+      final list = await ApiClient.fetchShowtimes(
+        roomId: _activeRoomId,
+        date: todayStr,
+      );
       if (!mounted) return;
       if (list.isNotEmpty) {
-        final parsed = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        // 2. Lọc chặt chẽ: Chỉ giữ lại các suất chiếu ngày hôm đó
+        final parsed = list
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .where((s) {
+              final itemDate =
+                  (s['date'] ??
+                          (s['show_id']?.toString().split('T').first ?? ''))
+                      .toString();
+              return itemDate.isEmpty || itemDate == todayStr;
+            })
+            .toList();
+
+        // 3. Sắp xếp: Suất đang chiếu được ưu tiên đưa lên đầu danh sách
+        final sorted = _sortShowtimes(parsed, now);
+
         setState(() {
-          _availableShowtimes = parsed;
+          _availableShowtimes = sorted;
           _isLoadingShowtimes = false;
         });
         _resolveActiveShowTitle();
       } else {
-        setState(() => _isLoadingShowtimes = false);
+        setState(() {
+          _availableShowtimes = [];
+          _isLoadingShowtimes = false;
+        });
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingShowtimes = false);
@@ -108,17 +217,28 @@ class _ScannerScreenState extends State<ScannerScreen> {
       return;
     }
 
-    if (_activeShowId.isEmpty) {
-      final match2010 = _availableShowtimes.firstWhere(
-        (s) => true,
-        orElse: () => _availableShowtimes.isNotEmpty ? _availableShowtimes.first : {},
-      );
-      if (match2010.isNotEmpty) {
-        setState(() {
-          _activeShowId = '${match2010['show_id']}';
-          _activeMovieTitle = '${match2010['movie_name'] ?? match2010['title'] ?? ''}';
-        });
-      }
+    if (_availableShowtimes.isEmpty) {
+      return;
+    }
+
+    // Kiểm tra xem _activeShowId hiện tại có nằm trong danh sách hôm nay không
+    final currentExists = _availableShowtimes.any(
+      (s) =>
+          '${s['show_id']}' == _activeShowId ||
+          ('${s['show_id']}'.contains('T') &&
+              _activeShowId.contains('T') &&
+              '${s['show_id']}'.split('T')[1] == _activeShowId.split('T')[1]),
+    );
+
+    // Nếu chưa chọn suất hoặc suất cũ không thuộc hôm nay,
+    // tự động khóa vào suất đang chiếu (suất đầu tiên sau khi đã sort)
+    if (_activeShowId.isEmpty || !currentExists) {
+      final topShow = _availableShowtimes.first;
+      setState(() {
+        _activeShowId = '${topShow['show_id']}';
+        _activeMovieTitle =
+            '${topShow['movie_name'] ?? topShow['title'] ?? ''}';
+      });
       return;
     }
 
@@ -162,23 +282,27 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   CSMockMovie get _movie => CSMockMovie(
-        id: '1',
-        title: _isAutoMode
-            ? 'Tất cả suất'
-            : (_activeMovieTitle.isNotEmpty ? _activeMovieTitle : 'Đang kiểm vé'),
-        time: _isAutoMode ? 'Tự động' : _formatTimeDisplay(_activeShowId),
-        room: _activeRoomId,
-        roomId: _activeRoomId,
-        showId: _activeShowId,
-      );
+    id: '1',
+    title: _isAutoMode
+        ? 'Tất cả suất'
+        : (_activeMovieTitle.isNotEmpty ? _activeMovieTitle : 'Đang kiểm vé'),
+    time: _isAutoMode ? 'Tự động' : _formatTimeDisplay(_activeShowId),
+    room: _activeRoomId,
+    roomId: _activeRoomId,
+    showId: _activeShowId,
+  );
 
   /// Số vé đã soát thật (đọc từ lịch sử Hive) của phòng + suất hiện tại.
   int get _scannedCount => HiveService.getScanHistory(
-        roomId: _activeRoomId,
-        showId: _isAutoMode ? null : _activeShowId,
-      ).length;
+    roomId: _activeRoomId,
+    showId: _isAutoMode ? null : _activeShowId,
+  ).length;
 
-  void _selectShowtime(String showId, String movieTitle, {required bool isAuto}) {
+  void _selectShowtime(
+    String showId,
+    String movieTitle, {
+    required bool isAuto,
+  }) {
     setState(() {
       _isAutoMode = isAuto;
       _activeShowId = showId;
@@ -258,7 +382,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
                         onPressed: () => Navigator.pop(sheetCtx),
                       ),
                     ],
@@ -316,7 +444,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   // Chế độ Tự động
                   InkWell(
                     onTap: () {
-                      _selectShowtime('all', 'Tất cả suất hôm nay (Tự động)', isAuto: true);
+                      _selectShowtime(
+                        'all',
+                        'Tất cả suất hôm nay (Tự động)',
+                        isAuto: true,
+                      );
                       Navigator.pop(sheetCtx);
                     },
                     borderRadius: BorderRadius.circular(12),
@@ -328,7 +460,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             : const Color(0xFF1B2234),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: _isAutoMode ? CSAppColors.primary : Colors.white12,
+                          color: _isAutoMode
+                              ? CSAppColors.primary
+                              : Colors.white12,
                           width: _isAutoMode ? 1.5 : 1,
                         ),
                       ),
@@ -340,8 +474,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
                               color: CSAppColors.primary.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.flash_auto,
-                                color: CSAppColors.primary, size: 20),
+                            child: const Icon(
+                              Icons.flash_auto,
+                              color: CSAppColors.primary,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           const Expanded(
@@ -368,142 +505,346 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             ),
                           ),
                           if (_isAutoMode)
-                            const Icon(Icons.check_circle,
-                                color: CSAppColors.primary, size: 22),
+                            const Icon(
+                              Icons.check_circle,
+                              color: CSAppColors.primary,
+                              size: 22,
+                            ),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
-                    'HOẶC KHÓA THEO SUẤT CHIẾU CỤ THỂ:',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.1,
-                      color: CSAppColors.muted,
-                    ),
+                  Row(
+                    children: [
+                      const Text(
+                        'HOẶC KHÓA THEO SUẤT CHIẾU HÔM NAY:',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.1,
+                          color: CSAppColors.muted,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '(${_toDateStr(DateTime.now()).split('-').reversed.join('/')})',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: CSAppColors.primary,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: _isLoadingShowtimes
                         ? const Center(child: CircularProgressIndicator())
                         : _availableShowtimes.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'Không tìm thấy lịch chiếu cho phòng này',
-                                  style: TextStyle(color: CSAppColors.muted),
-                                ),
-                              )
-                            : ListView.separated(
-                                itemCount: _availableShowtimes.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 8),
-                                itemBuilder: (context, idx) {
-                                  final s = _availableShowtimes[idx];
-                                  final showId = '${s['show_id']}';
-                                  final movieName =
-                                      '${s['movie_name'] ?? s['title'] ?? 'Suất chiếu'}';
-                                  final startTime = '${s['start_time'] ?? ''}';
-                                  final endTime = '${s['end_time'] ?? ''}';
-                                  final date = '${s['date'] ?? ''}';
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.event_busy,
+                                    color: CSAppColors.muted,
+                                    size: 36,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Không có suất chiếu nào hôm nay cho phòng này',
+                                    style: TextStyle(
+                                      color: CSAppColors.muted,
+                                      fontSize: 13,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: _availableShowtimes.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, idx) {
+                              final s = _availableShowtimes[idx];
+                              final showId = '${s['show_id']}';
+                              final movieName =
+                                  '${s['movie_name'] ?? s['title'] ?? 'Suất chiếu'}';
+                              final startTime = '${s['start_time'] ?? ''}';
+                              final endTime = '${s['end_time'] ?? ''}';
+                              final posterPath = (s['poster_path'] ?? '')
+                                  .toString();
+                              final posterUrl = _formatPosterUrl(posterPath);
 
-                                  final isCurrent = !_isAutoMode &&
-                                      (_activeShowId == showId ||
-                                          (_activeShowId.contains('T') &&
-                                              showId.contains('T') &&
-                                              _activeShowId.split('T')[1] ==
-                                                  showId.split('T')[1]));
+                              final now = DateTime.now();
+                              final priority = _getShowtimePriority(s, now);
+                              final isScreening = priority == 0;
+                              final isUpcoming = priority == 1;
+                              final isFinished = priority == 2;
 
-                                  return InkWell(
-                                    onTap: () {
-                                      _selectShowtime(showId, movieName,
-                                          isAuto: false);
-                                      Navigator.pop(sheetCtx);
-                                    },
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 10),
-                                      decoration: BoxDecoration(
+                              final isCurrent =
+                                  !_isAutoMode &&
+                                  (_activeShowId == showId ||
+                                      (_activeShowId.contains('T') &&
+                                          showId.contains('T') &&
+                                          _activeShowId.split('T')[1] ==
+                                              showId.split('T')[1]));
+
+                              return Opacity(
+                                opacity: isFinished ? 0.6 : 1.0,
+                                child: InkWell(
+                                  onTap: () {
+                                    _selectShowtime(
+                                      showId,
+                                      movieName,
+                                      isAuto: false,
+                                    );
+                                    Navigator.pop(sheetCtx);
+                                  },
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isCurrent
+                                          ? CSAppColors.primary.withValues(
+                                              alpha: 0.15,
+                                            )
+                                          : isScreening
+                                          ? const Color(0xFF10B981)
+                                                .withValues(alpha: 0.12)
+                                          : const Color(0xFF1A2132),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
                                         color: isCurrent
                                             ? CSAppColors.primary
-                                                .withValues(alpha: 0.15)
-                                            : const Color(0xFF1A2132),
-                                        borderRadius:
-                                            BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: isCurrent
-                                              ? CSAppColors.primary
-                                              : Colors.white10,
-                                          width: isCurrent ? 1.5 : 1,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: isCurrent
-                                                  ? CSAppColors.primary
-                                                  : const Color(0xFF283248),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              startTime.isNotEmpty
-                                                  ? startTime
-                                                  : showId.split('T').last,
-                                              style: TextStyle(
-                                                color: isCurrent
-                                                    ? Colors.black
-                                                    : Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  movieName,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 13,
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  '$date · Đến $endTime',
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: CSAppColors.muted,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (isCurrent)
-                                            const Icon(Icons.check_circle,
-                                                color: CSAppColors.primary,
-                                                size: 20),
-                                        ],
+                                            : isScreening
+                                            ? const Color(0xFF10B981)
+                                            : Colors.white10,
+                                        width: (isCurrent || isScreening)
+                                            ? 1.5
+                                            : 1,
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
+                                    child: Row(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                          child: Container(
+                                            width: 36,
+                                            height: 48,
+                                            color: const Color(0xFF1F2638),
+                                            child: posterUrl.isNotEmpty
+                                                ? Image.network(
+                                                    posterUrl,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) => const Center(
+                                                          child: Icon(
+                                                            Icons
+                                                                .movie_outlined,
+                                                            color:
+                                                                Colors.white38,
+                                                            size: 18,
+                                                          ),
+                                                        ),
+                                                  )
+                                                : const Center(
+                                                    child: Icon(
+                                                      Icons.movie_outlined,
+                                                      color: Colors.white38,
+                                                      size: 18,
+                                                    ),
+                                                  ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isCurrent
+                                                ? CSAppColors.primary
+                                                : isScreening
+                                                ? const Color(0xFF10B981)
+                                                : const Color(0xFF283248),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            startTime.isNotEmpty
+                                                ? startTime
+                                                : showId.split('T').last,
+                                            style: TextStyle(
+                                              color: (isCurrent || isScreening)
+                                                  ? Colors.black
+                                                  : Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      movieName,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        fontSize: 13,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if (isScreening) ...[
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color:
+                                                            const Color(
+                                                              0xFF10B981,
+                                                            ).withValues(
+                                                              alpha: 0.2,
+                                                            ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              4,
+                                                            ),
+                                                        border: Border.all(
+                                                          color: const Color(
+                                                            0xFF10B981,
+                                                          ),
+                                                          width: 1,
+                                                        ),
+                                                      ),
+                                                      child: const Text(
+                                                        '🟢 ĐANG CHIẾU',
+                                                        style: TextStyle(
+                                                          fontSize: 9,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          color: Color(
+                                                            0xFF10B981,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ] else if (isUpcoming) ...[
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: CSAppColors
+                                                            .primary
+                                                            .withValues(
+                                                              alpha: 0.15,
+                                                            ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              4,
+                                                            ),
+                                                      ),
+                                                      child: const Text(
+                                                        'Sắp chiếu',
+                                                        style: TextStyle(
+                                                          fontSize: 9,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: CSAppColors
+                                                              .primary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ] else if (isFinished) ...[
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.white10,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              4,
+                                                            ),
+                                                      ),
+                                                      child: const Text(
+                                                        'Đã kết thúc',
+                                                        style: TextStyle(
+                                                          fontSize: 9,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color:
+                                                              CSAppColors.muted,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                endTime.isNotEmpty
+                                                    ? 'Khung giờ: $startTime - $endTime'
+                                                    : 'Mã suất: $showId',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: CSAppColors.muted,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (isCurrent)
+                                          const Icon(
+                                            Icons.check_circle,
+                                            color: CSAppColors.primary,
+                                            size: 20,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
@@ -539,10 +880,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
             return;
           }
 
-          final String ticketRoom =
-              '${data['room']}'.replaceAll('seats_config_', '').trim();
-          final String currentRoom =
-              _activeRoomId.replaceAll('seats_config_', '').trim();
+          final String ticketRoom = '${data['room']}'
+              .replaceAll('seats_config_', '')
+              .trim();
+          final String currentRoom = _activeRoomId
+              .replaceAll('seats_config_', '')
+              .trim();
 
           if (ticketRoom != currentRoom) {
             _showResultBottomSheet(
@@ -559,8 +902,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
           // Kiểm tra Suất Chiếu
           final String ticketShow = '${data['show']}'.trim();
-          final String ticketTime =
-              ticketShow.contains('T') ? ticketShow.split('T')[1] : ticketShow;
+          final String ticketTime = ticketShow.contains('T')
+              ? ticketShow.split('T')[1]
+              : ticketShow;
           final String activeTime = _activeShowId.contains('T')
               ? _activeShowId.split('T')[1]
               : _activeShowId;
@@ -605,20 +949,24 @@ class _ScannerScreenState extends State<ScannerScreen> {
           }
 
           final now = DateTime.now();
-          final actualShowToRecord =
-              ticketShow.isNotEmpty ? ticketShow : _activeShowId;
+          final actualShowToRecord = ticketShow.isNotEmpty
+              ? ticketShow
+              : _activeShowId;
 
-          await HiveService.addScanRecord(ScanRecord(
-            ticket: ticketId,
-            room: currentRoom,
-            seat: seat,
-            show: actualShowToRecord,
-            scannedAt: now,
-          ));
+          await HiveService.addScanRecord(
+            ScanRecord(
+              ticket: ticketId,
+              room: currentRoom,
+              seat: seat,
+              show: actualShowToRecord,
+              scannedAt: now,
+            ),
+          );
           await HiveService.saveScannedTicket(code);
 
-          ApiClient.syncTicketsToServer(currentRoom, actualShowToRecord)
-              .then((success) {
+          ApiClient.syncTicketsToServer(currentRoom, actualShowToRecord).then((
+            success,
+          ) {
             if (success) {
               debugPrint("Đã bắn vé $ticketId lên server!");
             }
@@ -696,10 +1044,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _handleBarcode,
-          ),
+          MobileScanner(controller: _controller, onDetect: _handleBarcode),
           _ScannerOverlay(),
 
           // Thanh điều hướng & chọn suất chiếu trên đỉnh
@@ -722,8 +1067,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       color: Colors.black.withValues(alpha: 0.55),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.qr_code_scanner,
-                        color: CSAppColors.primary, size: 20),
+                    child: const Icon(
+                      Icons.qr_code_scanner,
+                      color: CSAppColors.primary,
+                      size: 20,
+                    ),
                   ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -732,7 +1080,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     borderRadius: BorderRadius.circular(22),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.72),
                         borderRadius: BorderRadius.circular(22),
@@ -752,8 +1102,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.meeting_room_outlined,
-                              color: CSAppColors.primary, size: 16),
+                          const Icon(
+                            Icons.meeting_room_outlined,
+                            color: CSAppColors.primary,
+                            size: 16,
+                          ),
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
@@ -768,8 +1121,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down,
-                              color: Colors.white70, size: 20),
+                          const Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
                         ],
                       ),
                     ),
@@ -785,8 +1141,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   ),
                   child: IconButton(
                     padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.flash_on,
-                        color: Colors.white, size: 20),
+                    icon: const Icon(
+                      Icons.flash_on,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     onPressed: _toggleFlash,
                   ),
                 ),
@@ -794,10 +1153,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
           ),
 
-          if (isProcessing)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
+          if (isProcessing) const Center(child: CircularProgressIndicator()),
 
           Positioned(
             bottom: 0,
@@ -881,9 +1237,7 @@ class _ScannerOverlay extends StatelessWidget {
           children: [
             Container(
               decoration: ShapeDecoration(
-                shape: _ScannerHoleShape(
-                  holeSize: Size(scanArea, scanArea),
-                ),
+                shape: _ScannerHoleShape(holeSize: Size(scanArea, scanArea)),
               ),
             ),
             Center(
@@ -944,11 +1298,7 @@ class _StatItem extends StatelessWidget {
   final String label;
   final Color? color;
 
-  const _StatItem({
-    required this.value,
-    required this.label,
-    this.color,
-  });
+  const _StatItem({required this.value, required this.label, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -964,10 +1314,7 @@ class _StatItem extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: CSAppColors.muted,
-          ),
+          style: const TextStyle(fontSize: 12, color: CSAppColors.muted),
         ),
       ],
     );

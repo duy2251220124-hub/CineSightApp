@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getIncidents, resolveIncident, getIncidentCategories, getStoredUser } from '../api/cineSightApi';
+import { getIncidents, resolveIncident, deleteIncident, getIncidentCategories, getStoredUser } from '../api/cineSightApi';
 import '../styles/dashboard.css';
 
 export default function Incidents() {
@@ -97,6 +97,20 @@ export default function Incidents() {
     } catch (e) {
       const errMsg = e?.response?.data?.error || e.message;
       alert("Không thể đánh dấu xử lý: " + errMsg);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa bản ghi sự cố này ngay lập tức không?")) return;
+    try {
+      await deleteIncident(id);
+      setIncidents(prev => prev.filter(inc => inc.id !== id));
+      if (selectedIncident && selectedIncident.id === id) {
+        setSelectedIncident(null);
+      }
+    } catch (e) {
+      const errMsg = e?.response?.data?.error || e.message;
+      alert("Không thể xóa sự cố: " + errMsg);
     }
   };
 
@@ -341,13 +355,22 @@ export default function Incidents() {
                           )}
                         </td>
                         <td className="align-right">
-                          {inc.status === 'open' && (
+                          {inc.status === 'open' ? (
                             <button 
                               className="soc-btn action-btn" 
                               style={{ color: 'var(--brand-blue)', borderColor: 'rgba(0, 243, 255, 0.3)' }}
                               onClick={(e) => { e.stopPropagation(); handleResolve(inc.id); }}
                             >
                               XỬ LÝ
+                            </button>
+                          ) : (
+                            <button 
+                              className="soc-btn action-btn" 
+                              style={{ color: '#EF4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                              onClick={(e) => { e.stopPropagation(); handleDelete(inc.id); }}
+                              title="Xóa sự cố ngay"
+                            >
+                              XÓA
                             </button>
                           )}
                         </td>
@@ -443,7 +466,7 @@ export default function Incidents() {
                 )}
               </div>
 
-              {selectedIncident.status === 'open' && (
+              {selectedIncident.status === 'open' ? (
                 <div style={{ padding: 16, borderTop: '1px solid var(--grid-line)' }}>
                   <button 
                     className="soc-btn primary" 
@@ -452,6 +475,19 @@ export default function Incidents() {
                   >
                     ĐÁNH DẤU ĐÃ XỬ LÝ
                   </button>
+                </div>
+              ) : (
+                <div style={{ padding: 16, borderTop: '1px solid var(--grid-line)' }}>
+                  <button 
+                    className="soc-btn" 
+                    style={{ width: '100%', padding: '12px', fontSize: 13, color: '#EF4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                    onClick={() => handleDelete(selectedIncident.id)}
+                  >
+                    XÓA SỰ CỐ NGAY
+                  </button>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', marginTop: 6 }}>
+                    Hệ thống sẽ tự động dọn dẹp sau 1 tiếng
+                  </div>
                 </div>
               )}
             </>

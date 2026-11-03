@@ -32,10 +32,12 @@ class TestDatabase3NFAndForeignKeys(unittest.TestCase):
             conn.close()
 
         # Kiểm tra xác thực đúng và sai mật khẩu
-        user_ok = authenticate_employee("duy", "123")
+        staff_uname = "khanh"
+        staff_pw = f"{staff_uname}@1234"
+        user_ok = authenticate_employee(staff_uname, staff_pw)
         self.assertIsNotNone(user_ok)
         self.assertEqual(user_ok["id"], 2)
-        self.assertIsNone(authenticate_employee("duy", "wrong_pass"))
+        self.assertIsNone(authenticate_employee(staff_uname, "wrong_pass"))
         self.assertIsNone(authenticate_employee("non_existent", "123"))
 
         # Kiểm tra hàm hash/verify độc lập

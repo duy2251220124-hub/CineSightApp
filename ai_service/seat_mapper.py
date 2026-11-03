@@ -52,15 +52,61 @@ def load_seats_config(room_id: str):
 def process_ai_detections(detected_heads, seats_config):
     """
     Ánh xạ tọa độ đầu người (từ YOLO) vào mã ghế cụ thể.
-    Hỗ trợ bù góc nhìn nghiêng camera, nghiêng đầu sát tay vịn và 2 khách ngồi cạnh nhau.
+    - Hỗ trợ đầu vào (cx, cy, conf, box_w, box_h) hoặc (cx, cy) tương thích ngược.
+    - Lọc khử trùng khoảng cách phối cảnh (Perspective Distance Suppression) theo độ tự tin giảm dần.
+    - Lọc vùng ghế (ROI Filter) với dung sai viền <= 8px, loại bỏ nhiễu cầu thang/lối đi/loa tường.
+    - Mỗi đa giác ghế đại diện đúng 1 ghế vật lý (1 ghế = tối đa 1 người), tuyệt đối không đẩy tràn sang next_seat.
     """
+    if not detected_heads or not seats_config:
+        return set()
+
+    # Chuẩn hóa đầu vào: (cx, cy, conf, box_w, box_h)
+    normalized_heads = []
+    for item in detected_heads:
+        if len(item) >= 5:
+            cx, cy, conf, bw, bh = (
+                float(item[0]),
+                float(item[1]),
+                float(item[2]),
+                float(item[3]),
+                float(item[4]),
+            )
+        elif len(item) == 3:
+            cx, cy, conf = float(item[0]), float(item[1]), float(item[2])
+            bw, bh = 0.0, 0.0
+        else:
+            cx, cy = float(item[0]), float(item[1])
+            conf, bw, bh = 1.0, 0.0, 0.0
+        normalized_heads.append((cx, cy, conf, bw, bh))
+
+    # Sắp xếp giảm dần theo độ tự tin (conf) để ưu tiên giữ khung nhận diện chuẩn nhất
+    normalized_heads.sort(key=lambda p: (-p[2], p[1], p[0]))
+
+    # Bộ lọc khử trùng khoảng cách phối cảnh (Perspective Distance Suppression)
+    filtered_heads = []
+    for cand in normalized_heads:
+        cx1, cy1, conf1, bw1, bh1 = cand
+        is_duplicate = False
+        for kept in filtered_heads:
+            cx2, cy2, conf2, bw2, bh2 = kept
+            max_w = max(bw1, bw2)
+            max_h = max(bh1, bh2)
+            if max_w > 0.0 and max_h > 0.0:
+                if abs(cx1 - cx2) < 0.48 * max_w and abs(cy1 - cy2) < 0.60 * max_h:
+                    is_duplicate = True
+                    break
+            else:
+                if abs(cx1 - cx2) < 12.0 and abs(cy1 - cy2) < 12.0:
+                    is_duplicate = True
+                    break
+        if not is_duplicate:
+            filtered_heads.append(cand)
+
     set_B = set()
-    sorted_heads = sorted(detected_heads, key=lambda p: (float(p[1]), float(p[0])))
-    for head in sorted_heads:
-        hx, hy = float(head[0]), float(head[1])
+    for hx, hy, conf, bw, bh in filtered_heads:
         matched_seat = None
-        
-        # Bước 1: Kiểm tra điểm đầu nằm lọt trong đa giác (hoặc dời xuống phần đệm ghế)
+
+        # Bước 1: Kiểm tra điểm neo nằm lọt bên trong đa giác ghế (hoặc dời xuống phần đệm ghế)
         for check_y in (hy + 10.0, hy + 18.0, hy, hy + 5.0):
             for seat_name, polygon in seats_config.items():
                 poly_np = np.array(polygon, np.int32)
@@ -70,28 +116,29 @@ def process_ai_detections(detected_heads, seats_config):
                     break
             if matched_seat:
                 break
-                
-        # Bước 2: Bù dung sai nếu khách nghiêng đầu sát thành ghế/tay vịn (khoảng cách <= 15px)
+
+        # Bước 2: Bù dung sai nhỏ (<= 8px) nếu khách nghiêng đầu sát tay vịn/viền đa giác ghế
+        # Chỉ xét khi điểm neo chưa rơi lọt vào đa giác nào ở Bước 1
         if not matched_seat:
             best_dist = -9999.0
             best_seat = None
+            probe_x_offsets = (0.0, 0.05 * bw, -0.05 * bw) if bw > 0.0 else (0.0,)
             for seat_name, polygon in seats_config.items():
+                if seat_name in set_B:
+                    continue
                 poly_np = np.array(polygon, np.int32)
-                d = cv2.pointPolygonTest(poly_np, (hx, hy + 10.0), True)
-                if d >= -15.0 and d > best_dist and seat_name not in set_B:
-                    best_dist = d
-                    best_seat = seat_name
+                for dx in probe_x_offsets:
+                    d = cv2.pointPolygonTest(poly_np, (hx + dx, hy + 10.0), True)
+                    if d >= -8.0 and d > best_dist:
+                        best_dist = d
+                        best_seat = seat_name
             if best_seat:
                 matched_seat = best_seat
 
-        if matched_seat:
-            if matched_seat in set_B:
-                m = re.match(r'([A-Z]+)(\d+)', matched_seat)
-                if m:
-                    next_seat = f"{m.group(1)}{int(m.group(2)) + 1:02d}"
-                    if next_seat in seats_config and next_seat not in set_B:
-                        matched_seat = next_seat
+        # Bước 3: Mỗi đa giác ghế chỉ chứa tối đa 1 người (không đẩy tràn sang next_seat)
+        if matched_seat and matched_seat not in set_B:
             set_B.add(matched_seat)
+
     return set_B
 
 def generate_alerts(set_A: set, set_B: set, room_id: str, total_seats: int, total_detected_people: int = None, capacity_threshold: int = 0):

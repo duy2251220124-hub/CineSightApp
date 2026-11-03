@@ -55,18 +55,17 @@ class CSSeatMap extends StatelessWidget {
       return CSAppColors.warning;
     }
 
+    // Ghế hỏng / sự cố luôn hiển thị màu cam
+    if (_hasSeat(brokenSeats, seat) || _hasSeat(reportedSeats, seat)) {
+      return CSAppColors.warning;
+    }
+
+    // Ghế cảnh báo AI
     if (showWarnings && _hasSeat(warningSeats, seat)) {
       return CSAppColors.danger;
     }
 
-    if (showWarnings && _hasSeat(brokenSeats, seat)) {
-      return CSAppColors.warning;
-    }
-
-    if (_hasSeat(reportedSeats, seat)) {
-      return CSAppColors.warning;
-    }
-
+    // Ghế đã soát vé hợp lệ
     if (_hasSeat(occupiedSeats, seat)) {
       return CSAppColors.primary;
     }
@@ -92,7 +91,7 @@ class CSSeatMap extends StatelessWidget {
   Widget _buildSeatTile(String seat) {
     final isSelected = selectionMode && _hasSeat(selectedSeats, seat);
     return GestureDetector(
-      onTap: selectionMode ? () => onSeatTapped?.call(seat) : null,
+      onTap: onSeatTapped != null ? () => onSeatTapped!(seat) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         width: 28,
@@ -420,18 +419,7 @@ class CSSeatMap extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 20),
-        const Wrap(
-          spacing: 16,
-          runSpacing: 8,
-          alignment: WrapAlignment.center,
-          children: [
-            CSLegendItem('Trống', CSAppColors.surfaceStrong),
-            CSLegendItem('Đã có người', CSAppColors.primary),
-            CSLegendItem('Trục trặc', CSAppColors.warning),
-            CSLegendItem('Cảnh báo', CSAppColors.danger),
-          ],
-        ),
+        const SizedBox(height: 10),
       ],
     );
   }

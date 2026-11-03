@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/network/api_client.dart';
 import 'package:mobile_app/theme/app_theme.dart';
-import 'package:mobile_app/core/widgets/cs_app_card.dart';
-import 'package:mobile_app/core/widgets/cs_status_tag.dart';
 import 'package:mobile_app/features/alerts/presentation/cs_warning_detail_screen.dart';
 import 'package:mobile_app/core/utils/room_utils.dart';
 
@@ -25,6 +23,8 @@ class CSWarningScreen extends StatefulWidget {
 class CSWarningScreenState extends State<CSWarningScreen> {
   List<dynamic> _alerts = [];
   bool _isLoading = true;
+  final Set<String> _expandedRooms = {};
+  bool _isBatchResolving = false;
 
   @override
   void initState() {
@@ -51,8 +51,43 @@ class CSWarningScreenState extends State<CSWarningScreen> {
     return CSAppColors.primary;
   }
 
+  Map<String, List<dynamic>> _groupByRoomAndShow() {
+    final Map<String, List<dynamic>> groups = {};
+    for (final a in _alerts) {
+      final key = '${a['room_id']}__${a['show_id']}';
+      groups.putIfAbsent(key, () => []).add(a);
+    }
+    return groups;
+  }
+
+  Future<void> _handleResolveRoom(String roomId, String showId, String roomDisplayName, int count) async {
+    setState(() => _isBatchResolving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final success = await ApiClient.resolveRoomAlerts(roomId, showId);
+    if (!mounted) return;
+    setState(() => _isBatchResolving = false);
+    if (success) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Đã xử lý xong toàn bộ $count cảnh báo cho $roomDisplayName!'),
+          backgroundColor: CSAppColors.success,
+        ),
+      );
+      loadAlerts();
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Không thể xử lý hàng loạt, vui lòng thử lại!'),
+          backgroundColor: CSAppColors.danger,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final grouped = _groupByRoomAndShow();
+
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -88,7 +123,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                         children: [
                           Text(
                             _alerts.isNotEmpty
-                                ? 'CẢNH BÁO TỪ HỆ THỐNG AI (${_alerts.length})'
+                                ? 'CẢNH BÁO TỪ HỆ THỐNG AI (${grouped.length} PHÒNG • ${_alerts.length} GHẾ)'
                                 : 'HỆ THỐNG AN TOÀN',
                             style: TextStyle(
                               color: _alerts.isNotEmpty ? CSAppColors.danger : CSAppColors.success,
@@ -118,7 +153,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                 ),
               ),
 
-              // Danh sách cảnh báo
+              // Danh sách cảnh báo gom nhóm theo phòng
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
@@ -146,130 +181,278 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                               ),
                             ],
                           )
-                        : ListView.builder(
+                        : ListView(
                             padding: const EdgeInsets.all(12),
-                            itemCount: _alerts.length,
-                            itemBuilder: (context, index) {
-                              final warning = _alerts[index];
-                              final alertType = warning['alert_type']?.toString() ?? '';
-                              final color = _color(alertType);
+                            children: grouped.entries.map((entry) {
+                              final groupKey = entry.key;
+                              final roomAlerts = entry.value;
+                              final first = roomAlerts.first;
+                              final roomId = first['room_id']?.toString() ?? '';
+                              final showId = first['show_id']?.toString() ?? '';
+                              final roomName = _formatRoomName(roomId);
+                              final timeDisplay = showId.contains('T') ? showId.split('T')[1] : showId;
 
-                              final isIllegal = alertType == 'illegal_occupant';
-                              final isMissing = alertType == 'missing_guest';
+                              // 3 chỉ số nghiệp vụ
+                              final scannedTickets = first['scanned_tickets_count'] ?? 0;
+                              final detectedPeople = first['detected_people_count'] ?? 0;
+                              final totalRoomAlerts = roomAlerts.length;
 
-                              final title = isIllegal
-                                  ? 'Khách ngồi sai ghế / Không có vé'
-                                  : (isMissing
-                                      ? 'Ghế trống bất thường (Đã có vé)'
-                                      : 'Cảnh báo vượt tải');
-
-                              final seat = warning['seat_id'] ?? warning['seats'] ?? 'N/A';
-                              final room = _formatRoomName(warning['room_id']?.toString());
-                              final show = warning['show_id']?.toString() ?? '';
-                              final timeDisplay = show.contains('T') ? show.split('T')[1] : show;
+                              final isExpanded = _expandedRooms.contains(groupKey);
 
                               return Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: CSAppCard(
-                                  borderColor: color.withValues(alpha: 0.6),
-                                  onTap: () async {
-                                    if (widget.onWarningSelected != null) {
-                                      widget.onWarningSelected!(Map<String, dynamic>.from(warning as Map));
-                                      return;
-                                    }
-                                    final res = await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => CSWarningDetailScreen(
-                                          alertId: warning['id'] ?? 1,
-                                          alertData: warning,
-                                          onResolved: loadAlerts,
-                                        ),
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: CSAppColors.surface,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: CSAppColors.danger.withValues(alpha: 0.6),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxSideShadow(
+                                        color: Colors.black.withValues(alpha: 0.25),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
                                       ),
-                                    );
-                                    if (res == true) {
-                                      loadAlerts();
-                                    }
-                                  },
-                                  child: Row(
+                                    ],
+                                  ),
+                                  child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
+                                      // Header nhóm phòng
                                       Container(
-                                        padding: const EdgeInsets.all(8),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                         decoration: BoxDecoration(
-                                          color: color.withValues(alpha: 0.15),
-                                          shape: BoxShape.circle,
+                                          color: CSAppColors.danger.withValues(alpha: 0.12),
+                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
                                         ),
-                                        child: Icon(
-                                          isIllegal ? Icons.person_off : Icons.event_seat_outlined,
-                                          color: color,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                        child: Row(
                                           children: [
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    title,
-                                                    style: TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 13,
-                                                      color: color,
-                                                    ),
-                                                  ),
+                                            const Icon(Icons.meeting_room_outlined, color: CSAppColors.danger, size: 20),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                '$roomName • Suất $timeDisplay',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 14,
+                                                  color: Colors.white,
                                                 ),
-                                                CSStatusTag(
-                                                  text: 'GHẾ $seat',
-                                                  color: color,
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 5),
-                                            Text(
-                                              '$room · Suất $timeDisplay',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
                                               ),
                                             ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              isIllegal
-                                                  ? '👉 Có người ngồi thực tế nhưng chưa soát vé.'
-                                                  : '👉 Đã soát vé tại cửa nhưng ghế đang trống.',
-                                              style: const TextStyle(
-                                                color: CSAppColors.muted,
-                                                fontSize: 11,
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: CSAppColors.danger,
+                                                borderRadius: BorderRadius.circular(6),
                                               ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Row(
-                                              children: [
-                                                Text(
-                                                  'Chạm để xử lý vi phạm',
-                                                  style: TextStyle(
-                                                    color: color,
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
+                                              child: Text(
+                                                '$totalRoomAlerts cảnh báo',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
                                                 ),
-                                                Icon(Icons.arrow_forward_ios, color: color, size: 10),
-                                              ],
+                                              ),
                                             ),
                                           ],
                                         ),
                                       ),
+
+                                      // 3 Chỉ số nghiệp vụ cốt lõi
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: _buildMetricTile(
+                                                label: 'Vé đã quét',
+                                                value: '$scannedTickets',
+                                                icon: Icons.confirmation_number_outlined,
+                                                color: CSAppColors.primary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: _buildMetricTile(
+                                                label: 'Trong rạp',
+                                                value: '$detectedPeople',
+                                                icon: Icons.groups_outlined,
+                                                color: Colors.cyanAccent,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: _buildMetricTile(
+                                                label: 'Ghế vi phạm',
+                                                value: '$totalRoomAlerts',
+                                                icon: Icons.warning_amber_rounded,
+                                                color: CSAppColors.danger,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      // Danh sách Chip các ghế cảnh báo
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                        child: Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          children: roomAlerts.map((warning) {
+                                            final atype = warning['alert_type']?.toString() ?? '';
+                                            final sName = warning['seat_id']?.toString() ?? 'N/A';
+                                            final isIll = atype == 'illegal_occupant';
+                                            final c = isIll ? CSAppColors.danger : CSAppColors.warning;
+                                            return Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: c.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: c.withValues(alpha: 0.6)),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(isIll ? Icons.person_off : Icons.event_seat, size: 13, color: c),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    'Ghế $sName',
+                                                    style: TextStyle(
+                                                      color: c,
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ),
+
+                                      const SizedBox(height: 10),
+
+                                      // Hàng nút bấm: Xử lý 1 chạm & Xem chi tiết
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: ElevatedButton.icon(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: CSAppColors.danger,
+                                                  foregroundColor: Colors.white,
+                                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                ),
+                                                onPressed: _isBatchResolving
+                                                    ? null
+                                                    : () => _handleResolveRoom(roomId, showId, roomName, totalRoomAlerts),
+                                                icon: const Icon(Icons.check_circle_outline, size: 18),
+                                                label: Text(
+                                                  'XỬ LÝ TOÀN BỘ PHÒNG ($totalRoomAlerts GHẾ)',
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            IconButton(
+                                              tooltip: isExpanded ? 'Thu gọn' : 'Xem từng ghế',
+                                              style: IconButton.styleFrom(
+                                                backgroundColor: CSAppColors.border.withValues(alpha: 0.3),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              ),
+                                              icon: Icon(
+                                                isExpanded ? Icons.expand_less : Icons.expand_more,
+                                                color: Colors.white70,
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  if (isExpanded) {
+                                                    _expandedRooms.remove(groupKey);
+                                                  } else {
+                                                    _expandedRooms.add(groupKey);
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      // Danh sách chi tiết từng ghế khi bấm mở rộng
+                                      if (isExpanded)
+                                        Container(
+                                          padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(alpha: 0.15),
+                                            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
+                                          ),
+                                          child: Column(
+                                            children: roomAlerts.map((warning) {
+                                              final atype = warning['alert_type']?.toString() ?? '';
+                                              final color = _color(atype);
+                                              final isIll = atype == 'illegal_occupant';
+                                              final seat = warning['seat_id'] ?? 'N/A';
+                                              final title = isIll
+                                                  ? 'Khách ngồi sai ghế / Không có vé'
+                                                  : 'Ghế trống bất thường (Đã có vé)';
+
+                                              return Padding(
+                                                padding: const EdgeInsets.only(top: 8),
+                                                child: InkWell(
+                                                  onTap: () async {
+                                                    final res = await Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) => CSWarningDetailScreen(
+                                                          alertId: warning['id'] ?? 1,
+                                                          alertData: warning,
+                                                          onResolved: loadAlerts,
+                                                        ),
+                                                      ),
+                                                    );
+                                                    if (res == true) loadAlerts();
+                                                  },
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(10),
+                                                    decoration: BoxDecoration(
+                                                      color: CSAppColors.surface,
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      border: Border.all(color: color.withValues(alpha: 0.5)),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(isIll ? Icons.person_off : Icons.event_seat, color: color, size: 20),
+                                                        const SizedBox(width: 8),
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+                                                              Text('Vị trí ghế: $seat', style: const TextStyle(fontSize: 11, color: CSAppColors.muted)),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                        const Icon(Icons.arrow_forward_ios, size: 12, color: CSAppColors.muted),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
                               );
-                            },
+                            }).toList(),
                           ),
               ),
             ],
@@ -278,4 +461,54 @@ class CSWarningScreenState extends State<CSWarningScreen> {
       ),
     );
   }
+
+  Widget _buildMetricTile({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(color: CSAppColors.muted, fontSize: 10),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class BoxSideShadow extends BoxShadow {
+  const BoxSideShadow({
+    super.color = const Color(0x33000000),
+    super.offset = Offset.zero,
+    super.blurRadius = 0.0,
+    super.spreadRadius = 0.0,
+  });
 }

@@ -75,13 +75,22 @@ class TestApiAndStrictRules(unittest.TestCase):
 
     def test_1_login_returns_token_and_protects_admin_routes(self):
         """Điểm 1A: /api/v1/login trả về token; các API quản trị chặn 401/403 đúng vai trò."""
-        # Đăng nhập bằng tài khoản Soát vé (duy / 123)
-        res = self.client.post("/api/v1/login", json={"username": "duy", "password": "123"})
+        # Đăng nhập bằng tài khoản Soát vé trên Mobile App -> 200 OK
+        staff_uname = "khanh"
+        staff_pw = f"{staff_uname}@1234"
+        res = self.client.post("/api/v1/login", json={"username": staff_uname, "password": staff_pw})
         self.assertEqual(res.status_code, 200)
         body = res.json()
         self.assertIn("token", body)
         staff_token = body["token"]
         self.assertEqual(body["user"]["id"], 2)
+
+        # Đăng nhập bằng tài khoản Soát vé trên Web Admin (client='web_admin') -> 403 Forbidden
+        res_web_staff = self.client.post(
+            "/api/v1/login",
+            json={"username": staff_uname, "password": staff_pw, "client": "web_admin"},
+        )
+        self.assertEqual(res_web_staff.status_code, 403)
 
         # Không gửi token -> 401 khi gọi POST /api/v1/configs
         res_unauth = self.client.post(
@@ -116,6 +125,19 @@ class TestApiAndStrictRules(unittest.TestCase):
         with self.assertRaises(ValueError):
             save_tickets("room1", fake_show, [{"ticket": "T-999", "seat": "A1"}])
 
+        # Gọi /api/v1/sync_tickets không có token -> 401
+        res_unauth = self.client.post(
+            "/api/v1/sync_tickets",
+            data={
+                "room_id": "room1",
+                "show_id": fake_show,
+                "scanned_tickets": json.dumps([{"ticket": "T-999", "seat": "A1"}]),
+            },
+        )
+        self.assertEqual(res_unauth.status_code, 401)
+
+        # Có token hợp lệ -> kiểm tra suất chiếu ma -> 404
+        staff_token = create_token(user_id=2)
         res = self.client.post(
             "/api/v1/sync_tickets",
             data={
@@ -123,6 +145,7 @@ class TestApiAndStrictRules(unittest.TestCase):
                 "show_id": fake_show,
                 "scanned_tickets": json.dumps([{"ticket": "T-999", "seat": "A1"}]),
             },
+            headers={"Authorization": f"Bearer {staff_token}"},
         )
         self.assertEqual(res.status_code, 404)
 
@@ -207,6 +230,329 @@ class TestApiAndStrictRules(unittest.TestCase):
             self.assertEqual(res_no_model.status_code, 503)
         finally:
             main.model = saved_model
+
+
+
+    def test_5_issue6_employee_isolation_peer_protection_and_soft_deactivate(self):
+        """Vấn đề 6: Lọc danh sách nhân viên, bảo vệ đồng cấp Quản lý, chống tự xóa và soft-deactivate khi có sự cố."""
+        from database import add_employee, get_employee
+        conn = sqlite3.connect(DB_PATH)
+        mgr_b_id = None
+        staff_inc_id = None
+        staff_clean_id = None
+        inc_id = None
+        try:
+            # Dọn sạch dữ liệu thử nghiệm cũ nếu có
+            conn.execute("DELETE FROM incidents WHERE title LIKE 'zz_%'")
+            conn.execute("DELETE FROM employees WHERE username LIKE 'zz_%'")
+            conn.commit()
+
+            # Tạo Quản lý B trực tiếp trong DB (vì API chặn tạo Quản lý)
+            mgr_b_id = add_employee("zz_mgr_b", "pass123", "zz_Quản Lý B", "Quản lý", "ca_sang")
+            staff_inc_id = add_employee("zz_staff_inc", "pass123", "zz_Nhân Viên Có Sự Cố", "Soát vé", "ca_sang")
+            staff_clean_id = add_employee("zz_staff_clean", "pass123", "zz_Nhân Viên Sạch", "Soát vé", "ca_toi")
+
+            mgr_a_token = create_token(user_id=1)  # Quản lý A (id=1)
+
+            # 1. Quản lý gọi POST /api/v1/employees với role="Quản lý" -> 403
+            res_create_mgr = self.client.post(
+                "/api/v1/employees",
+                json={
+                    "username": "zz_mgr_illegal",
+                    "password": "123",
+                    "name": "zz_Illegal Manager",
+                    "role": "Quản lý",
+                    "shift": "ca_sang",
+                },
+                headers={"Authorization": f"Bearer {mgr_a_token}"},
+            )
+            self.assertEqual(res_create_mgr.status_code, 403)
+
+            # 2. Quản lý A gọi PUT hoặc DELETE lên Quản lý B -> 403
+            res_put_peer = self.client.put(
+                f"/api/v1/employees/{mgr_b_id}",
+                json={
+                    "username": "zz_mgr_b",
+                    "password": "",
+                    "name": "zz_Hacked Name",
+                    "role": "Quản lý",
+                    "shift": "ca_toi",
+                },
+                headers={"Authorization": f"Bearer {mgr_a_token}"},
+            )
+            self.assertEqual(res_put_peer.status_code, 403)
+
+            res_del_peer = self.client.delete(
+                f"/api/v1/employees/{mgr_b_id}",
+                headers={"Authorization": f"Bearer {mgr_a_token}"},
+            )
+            self.assertEqual(res_del_peer.status_code, 403)
+
+            # 3. Quản lý A tự gọi DELETE lên chính mình -> 403
+            res_del_self = self.client.delete(
+                "/api/v1/employees/1",
+                headers={"Authorization": f"Bearer {mgr_a_token}"},
+            )
+            self.assertEqual(res_del_self.status_code, 403)
+
+            # 4. GET /api/v1/employees với token của Quản lý A -> chỉ thấy Soát vé + chính Quản lý A (không lộ Quản lý B)
+            res_list = self.client.get(
+                "/api/v1/employees",
+                headers={"Authorization": f"Bearer {mgr_a_token}"},
+            )
+            self.assertEqual(res_list.status_code, 200)
+            emps = res_list.json()["employees"]
+            returned_ids = {e["id"] for e in emps}
+            self.assertIn(1, returned_ids)
+            self.assertIn(staff_inc_id, returned_ids)
+            self.assertNotIn(mgr_b_id, returned_ids)
+            for e in emps:
+                self.assertNotIn("password", e)
+                self.assertIn("is_active", e)
+                self.assertIn("last_seen_at", e)
+                self.assertIn("is_online", e)
+                if e["id"] != 1:
+                    self.assertNotEqual(e["role"], "Quản lý")
+
+            # 5. Xóa nhân viên Soát vé ĐÃ CÓ biên bản sự cố -> soft-deactivate (is_active = 0), đăng nhập bị từ chối (401)
+            inc_id = create_incident(
+                category="seat_damage",
+                severity="low",
+                title="zz_Test Incident For Soft Delete",
+                description="zz_desc",
+                room_id="room1",
+                show_id=None,
+                seat_ids='["A01"]',
+                reporter_id=staff_inc_id,
+            )
+            res_soft_del = self.client.delete(
+                f"/api/v1/employees/{staff_inc_id}",
+                headers={"Authorization": f"Bearer {mgr_a_token}"},
+            )
+            self.assertEqual(res_soft_del.status_code, 200)
+            self.assertEqual(res_soft_del.json().get("action"), "deactivated")
+
+            deactivated_emp = get_employee(staff_inc_id)
+            self.assertIsNotNone(deactivated_emp)
+            self.assertEqual(deactivated_emp["is_active"], 0)
+
+            res_login_deactivated = self.client.post(
+                "/api/v1/login",
+                json={"username": "zz_staff_inc", "password": "pass123"},
+            )
+            self.assertEqual(res_login_deactivated.status_code, 401)
+
+            # Token cũ của nhân viên đã bị ngưng hoạt động cũng bị từ chối
+            dead_token = create_token(user_id=staff_inc_id)
+            res_dead_token = self.client.delete(
+                "/api/v1/tickets",
+                headers={"Authorization": f"Bearer {dead_token}"},
+            )
+            self.assertEqual(res_dead_token.status_code, 401)
+
+            # 6. Xóa nhân viên Soát vé CHƯA CÓ biên bản sự cố -> xóa vật lý (deleted)
+            res_hard_del = self.client.delete(
+                f"/api/v1/employees/{staff_clean_id}",
+                headers={"Authorization": f"Bearer {mgr_a_token}"},
+            )
+            self.assertEqual(res_hard_del.status_code, 200)
+            self.assertEqual(res_hard_del.json().get("action"), "deleted")
+            self.assertIsNone(get_employee(staff_clean_id))
+        finally:
+            if inc_id is not None:
+                conn.execute("DELETE FROM incidents WHERE id=?", (inc_id,))
+            conn.execute("DELETE FROM incidents WHERE title LIKE 'zz_%'")
+            conn.execute("DELETE FROM employees WHERE username LIKE 'zz_%'")
+            conn.commit()
+            conn.close()
+
+    def test_6_issues_2_and_3_dual_auth_and_image_quality_clahe(self):
+        """Vấn đề 2 & 3: Dual Auth cho /api/v1/analyze và tiền kiểm tra chất lượng ảnh + CLAHE."""
+        import numpy as np
+        import cv2
+
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            row = conn.execute(
+                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' LIMIT 1"
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(row)
+        valid_room, valid_show = row[0], row[1]
+
+        # Tạo 1 ảnh tối & phẳng (brightness < 40, sharpness < 35)
+        dark_img = np.full((120, 160, 3), 10, dtype=np.uint8)
+        ok, buf = cv2.imencode(".jpg", dark_img)
+        self.assertTrue(ok)
+        img_bytes = buf.tobytes()
+
+        # 1. Request từ ngoài Internet (có X-Forwarded-For) nhưng KHÔNG có Token và KHÔNG có X-Camera-Key -> 401
+        res_ext_unauth = self.client.post(
+            "/api/v1/analyze",
+            data={"room_id": valid_room, "show_id": valid_show},
+            files={"image": ("dark.jpg", io.BytesIO(img_bytes), "image/jpeg")},
+            headers={"X-Forwarded-For": "203.0.113.50"},
+        )
+        self.assertEqual(res_ext_unauth.status_code, 401)
+
+        conn_clean = sqlite3.connect(DB_PATH)
+        try:
+            max_log_row = conn_clean.execute("SELECT COALESCE(MAX(id), 0) FROM ai_inference_logs").fetchone()
+            max_alert_row = conn_clean.execute("SELECT COALESCE(MAX(id), 0) FROM alerts").fetchone()
+            max_log_id = max_log_row[0] if max_log_row else 0
+            max_alert_id = max_alert_row[0] if max_alert_row else 0
+
+            # 2. Request có X-Camera-Key hợp lệ -> 200 OK và trả về image_quality có LOW_LIGHT, LOW_SHARPNESS, clahe_applied=True
+            res_cam_ok = self.client.post(
+                "/api/v1/analyze",
+                data={"room_id": valid_room, "show_id": valid_show},
+                files={"image": ("dark.jpg", io.BytesIO(img_bytes), "image/jpeg")},
+                headers={
+                    "X-Forwarded-For": "203.0.113.50",
+                    "X-Camera-Key": "CINESIGHT_CAM_SECURE_2026",
+                },
+            )
+            self.assertEqual(res_cam_ok.status_code, 200)
+            summary = res_cam_ok.json()["summary"]
+            self.assertIn("image_quality", summary)
+            iq = summary["image_quality"]
+            self.assertTrue(iq["clahe_applied"])
+            self.assertIn("LOW_LIGHT", iq["warnings"])
+            self.assertIn("LOW_SHARPNESS", iq["warnings"])
+        finally:
+            conn_clean.execute("DELETE FROM ai_inference_logs WHERE image_width=160 AND image_height=120")
+            conn_clean.execute("DELETE FROM ai_inference_logs WHERE id > ?", (max_log_id,))
+            conn_clean.execute("DELETE FROM alerts WHERE id > ?", (max_alert_id,))
+            conn_clean.commit()
+            conn_clean.close()
+
+
+
+    def test_7_issue12_scheduler_time_warp_and_idempotent_alert_refresh(self):
+        """Vấn đề 12: Bộ lập lịch Time-Warp T-3 phút (AUTO_T_MINUS_3) và tự động gỡ cảnh báo cũ khi khách vào muộn (Idempotent Alert Refresh)."""
+        from database import refresh_showtime_alerts, get_active_alerts, get_inference_logs
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            row = conn.execute(
+                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' LIMIT 1"
+            ).fetchone()
+            self.assertIsNotNone(row)
+            valid_room, valid_show = row[0], row[1]
+
+            max_log_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM ai_inference_logs").fetchone()[0]
+            max_alert_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM alerts").fetchone()[0]
+
+            # 1. Kiểm tra Idempotent Alert Refresh: Lúc T-5 khách ghế C04 chưa vào -> missing_guest
+            refresh_showtime_alerts(
+                valid_room,
+                valid_show,
+                {"illegal_occupants": [], "missing_guests": ["C04"], "over_capacity": False},
+            )
+            active_t5 = [
+                a for a in get_active_alerts(valid_room)
+                if a["show_id"] == valid_show and a["seat_id"] == "C04" and a["alert_type"] == "missing_guest"
+            ]
+            self.assertEqual(len(active_t5), 1)
+
+            # Lúc T-3 khách ghế C04 đã vào ngồi đúng ghế -> missing_guests không còn C04 -> tự động đóng cảnh báo cũ
+            ref_res = refresh_showtime_alerts(
+                valid_room,
+                valid_show,
+                {"illegal_occupants": [], "missing_guests": [], "over_capacity": False},
+            )
+            self.assertGreaterEqual(ref_res["auto_resolved_count"], 1)
+            active_t3 = [
+                a for a in get_active_alerts(valid_room)
+                if a["show_id"] == valid_show and a["seat_id"] == "C04" and a["alert_type"] == "missing_guest"
+            ]
+            self.assertEqual(len(active_t3), 0)
+
+            # 2. Kiểm tra POST /api/v1/scheduler/trigger_pre_show với offset_minutes=-3 -> ghi nhận AUTO_T_MINUS_3
+            res_trig = self.client.post(
+                "/api/v1/scheduler/trigger_pre_show",
+                json={"room_id": valid_room, "show_id": valid_show, "offset_minutes": -3},
+            )
+            self.assertEqual(res_trig.status_code, 200)
+            body = res_trig.json()
+            self.assertEqual(body.get("trigger_source"), "AUTO_T_MINUS_3")
+            self.assertEqual(body["summary"].get("trigger_source"), "AUTO_T_MINUS_3")
+            self.assertIn("scheduler_simulation", body)
+
+            logs = get_inference_logs(room_id=valid_room, show_id=valid_show, limit=5)
+            self.assertTrue(any(lg.get("trigger_source") == "AUTO_T_MINUS_3" for lg in logs))
+        finally:
+            conn.execute("DELETE FROM ai_inference_logs WHERE id > ?", (max_log_id,))
+            conn.execute("DELETE FROM alerts WHERE id > ?", (max_alert_id,))
+            conn.commit()
+            conn.close()
+
+
+    def test_8_grouped_alerts_and_one_tap_batch_resolve(self):
+        """Kiểm tra Gom nhóm cảnh báo theo phòng (3 chỉ số: vé đã quét, người trong rạp, ghế vi phạm)
+        và API Xử lý 1 chạm hàng loạt (POST /api/v1/resolve_room_alerts)."""
+        from database import save_alerts, get_active_alerts, resolve_room_alerts
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            row = conn.execute(
+                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' LIMIT 1"
+            ).fetchone()
+            self.assertIsNotNone(row)
+            valid_room, valid_show = row[0], row[1]
+
+            max_alert_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM alerts").fetchone()[0]
+
+            # 1. Tạo 2 cảnh báo vi phạm cho phòng
+            save_alerts(valid_room, valid_show, "illegal_occupant", ["Z01", "Z02"])
+
+            # 2. Gọi GET /api/v1/alerts -> Kiểm tra cấu trúc trả về
+            res = self.client.get(f"/api/v1/alerts?room_id={valid_room}")
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertEqual(data["status"], "success")
+            self.assertIn("grouped_alerts", data)
+
+            # Kiểm tra cụm gom nhóm
+            groups = [g for g in data["grouped_alerts"] if g["room_id"] == valid_room and g["show_id"] == valid_show]
+            self.assertEqual(len(groups), 1)
+            grp = groups[0]
+            self.assertIn("scanned_tickets_count", grp)
+            self.assertIn("detected_people_count", grp)
+            self.assertIn("all_alerted_seats", grp)
+            self.assertIn("total_alerts", grp)
+            self.assertIn("Z01", grp["all_alerted_seats"])
+            self.assertIn("Z02", grp["all_alerted_seats"])
+
+            # 3. Kiểm tra API Xử lý 1 chạm: POST /api/v1/resolve_room_alerts
+            # 3A: Không gửi token -> chặn 401 Unauthorized
+            res_unauth = self.client.post(
+                "/api/v1/resolve_room_alerts",
+                json={"room_id": valid_room, "show_id": valid_show},
+            )
+            self.assertEqual(res_unauth.status_code, 401)
+
+            # 3B: Gửi Bearer Token hợp lệ của nhân viên -> 200 OK
+            staff_token = create_token(user_id=2)
+            res_resolve = self.client.post(
+                "/api/v1/resolve_room_alerts",
+                json={"room_id": valid_room, "show_id": valid_show},
+                headers={"Authorization": f"Bearer {staff_token}"},
+            )
+            self.assertEqual(res_resolve.status_code, 200)
+            res_body = res_resolve.json()
+            self.assertEqual(res_body["status"], "success")
+            self.assertGreaterEqual(res_body["resolved_count"], 2)
+
+            # Sau khi giải quyết hàng loạt, không còn cảnh báo mở cho 2 ghế Z01, Z02
+            active_after = [
+                a for a in get_active_alerts(valid_room)
+                if a["show_id"] == valid_show and a["seat_id"] in ("Z01", "Z02")
+            ]
+            self.assertEqual(len(active_after), 0)
+        finally:
+            conn.execute("DELETE FROM alerts WHERE id > ?", (max_alert_id,))
+            conn.commit()
+            conn.close()
 
 
 if __name__ == "__main__":

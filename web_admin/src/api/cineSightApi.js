@@ -1,9 +1,23 @@
 import axios from 'axios';
 
-// Khi deploy thực tế, dùng biến môi trường VITE_API_BASE hoặc fallback localhost:8000
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) 
-  ? import.meta.env.VITE_API_BASE 
-  : 'http://localhost:8000';
+// Vấn đề 5 (Phương án 5A): Tự động nhận diện API_BASE
+// 1. Ưu tiên biến môi trường VITE_API_BASE nếu có cấu hình
+// 2. Khi chạy Vite dev server (cổng 5173) -> gọi http://localhost:8000
+// 3. Khi đã build và được phục vụ trực tiếp bởi FastAPI (cùng origin) -> dùng đường dẫn tương đối ""
+const resolveApiBase = () => {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) {
+    return String(import.meta.env.VITE_API_BASE).trim().replace(/\/+$/, '');
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.port === '5173') {
+      return 'http://localhost:8000';
+    }
+    return '';
+  }
+  return 'http://localhost:8000';
+};
+
+const API_BASE = resolveApiBase();
 
 const api = axios.create({ 
   baseURL: API_BASE,
@@ -23,7 +37,14 @@ export const getStoredToken = () => {
 export const getStoredUser = () => {
   try {
     const raw = localStorage.getItem(AUTH_USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.role !== 'Quản lý') {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(AUTH_USER_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -51,8 +72,19 @@ export const loginUser = async (username, password) => {
   const res = await api.post('/api/v1/login', {
     username: (username || '').trim(),
     password: (password || '').trim(),
+    client: 'web_admin',
   });
   if (res.data && res.data.status === 'success') {
+    if (!res.data.user || res.data.user.role !== 'Quản lý') {
+      const err = new Error('Forbidden');
+      err.response = {
+        status: 403,
+        data: {
+          error: 'Tài khoản Nhân viên (Soát vé) chỉ được đăng nhập trên Mobile App. Vui lòng dùng tài khoản Quản lý cho Web Admin!',
+        },
+      };
+      throw err;
+    }
     if (res.data.token) {
       localStorage.setItem(AUTH_TOKEN_KEY, res.data.token);
     }
@@ -65,12 +97,27 @@ export const loginUser = async (username, password) => {
 
 export { API_BASE };
 
-export const analyzeRoom = async (roomId, showId, imageFile) => {
+export const analyzeRoom = async (roomId, showId, imageFile, triggerSource = 'MANUAL') => {
   const formData = new FormData();
   formData.append('room_id', roomId);
   formData.append('show_id', showId);
+  formData.append('trigger_source', triggerSource);
   formData.append('image', imageFile);
   const res = await api.post('/api/v1/analyze', formData);
+  return res.data;
+};
+
+export const triggerPreShowScan = async (roomId, showId, offsetMinutes = -3) => {
+  const res = await api.post('/api/v1/scheduler/trigger_pre_show', {
+    room_id: roomId,
+    show_id: showId,
+    offset_minutes: offsetMinutes,
+  });
+  return res.data;
+};
+
+export const getSchedulerStatus = async () => {
+  const res = await api.get('/api/v1/scheduler/status');
   return res.data;
 };
 
@@ -80,8 +127,24 @@ export const getActiveAlerts = async (roomId = null) => {
   return res.data.alerts || [];
 };
 
+export const getActiveAlertsData = async (roomId = null) => {
+  const url = roomId ? `/api/v1/alerts?room_id=${roomId}` : '/api/v1/alerts';
+  const res = await api.get(url);
+  return res.data || { alerts: [], grouped_alerts: [] };
+};
+
+export const resolveRoomAlerts = async (roomId, showId) => {
+  const res = await api.post('/api/v1/resolve_room_alerts', {
+    room_id: roomId,
+    show_id: showId,
+  });
+  return res.data;
+};
+
 export const healthCheck = async () => {
-  const res = await api.get('/');
+  const res = await api.get('/', {
+    headers: { Accept: 'application/json' },
+  });
   return res.data;
 };
 
@@ -150,7 +213,7 @@ export const getShifts = async () => {
 };
 
 export const addEmployee = async (username, password, name, role, shift = null) => {
-  const payload = { username, password, name, role };
+  const payload = { username, password, name, role: role || 'Soát vé' };
   if (shift) payload.shift = shift;
   const res = await api.post('/api/v1/employees', payload);
   return res.data;
@@ -161,9 +224,10 @@ export const deleteEmployee = async (empId) => {
   return res.data;
 };
 
-export const updateEmployee = async (empId, username, password, name, role, shift = null) => {
+export const updateEmployee = async (empId, username, password, name, role, shift = null, isActive = null) => {
   const payload = { username, password, name, role };
-  if (shift) payload.shift = shift;
+  if (shift !== undefined) payload.shift = shift;
+  if (isActive !== null && isActive !== undefined) payload.is_active = isActive;
   const res = await api.put(`/api/v1/employees/${empId}`, payload);
   return res.data;
 };
@@ -183,6 +247,16 @@ export const resolveIncident = async (id, resolverId = null) => {
   const effectiveResolverId = resolverId || (storedUser && storedUser.id) || null;
   const payload = effectiveResolverId ? { resolver_id: effectiveResolverId } : {};
   const res = await api.post(`/api/v1/incidents/${id}/resolve`, payload);
+  return res.data;
+};
+
+export const deleteIncident = async (id) => {
+  const res = await api.delete(`/api/v1/incidents/${id}`);
+  return res.data;
+};
+
+export const clearResolvedIncidents = async () => {
+  const res = await api.delete('/api/v1/incidents/resolved/clear');
   return res.data;
 };
 

@@ -9,10 +9,7 @@ import 'package:mobile_app/core/widgets/cs_status_tag.dart';
 class CSShowtimesScreen extends StatefulWidget {
   final ValueChanged<Map<String, dynamic>>? onMovieSelected;
 
-  const CSShowtimesScreen({
-    super.key,
-    this.onMovieSelected,
-  });
+  const CSShowtimesScreen({super.key, this.onMovieSelected});
 
   @override
   State<CSShowtimesScreen> createState() => _CSShowtimesScreenState();
@@ -99,10 +96,61 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
     }
   }
 
+  static DateTime? _parseShowDateTime(String dateStr, String timeStr) {
+    try {
+      final tParts = timeStr.trim().split(':');
+      final dParts = dateStr.trim().split('-');
+      if (tParts.length >= 2 && dParts.length >= 3) {
+        return DateTime(
+          int.parse(dParts[0]),
+          int.parse(dParts[1]),
+          int.parse(dParts[2]),
+          int.parse(tParts[0]),
+          int.parse(tParts[1]),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static int _getShowtimePriority(Map<String, dynamic> s, DateTime now) {
+    final date =
+        (s['date'] ?? (s['show_id']?.toString().split('T').first ?? ''))
+            .toString();
+    final startTime =
+        (s['start_time'] ?? (s['show_id']?.toString().split('T').last ?? ''))
+            .toString();
+    final endTime = (s['end_time'] ?? '').toString();
+
+    final startDt = _parseShowDateTime(date, startTime);
+    if (startDt == null) return 1;
+
+    final endDt =
+        _parseShowDateTime(date, endTime) ??
+        startDt.add(const Duration(minutes: 110));
+    final checkInStart = startDt.subtract(const Duration(minutes: 20));
+    final checkInEnd = endDt.add(const Duration(minutes: 10));
+
+    if (now.isAfter(checkInStart) && now.isBefore(checkInEnd)) {
+      return 0; // Đang chiếu / Đang soát vé
+    }
+    if (now.isBefore(checkInStart)) {
+      return 1; // Sắp chiếu
+    }
+    return 2; // Đã kết thúc
+  }
+
   String _formatDuration(int mins) {
     final h = mins ~/ 60;
     final m = mins % 60;
     return '${h}h${m.toString().padLeft(2, '0')}p ($mins phút)';
+  }
+
+  static String _formatPosterUrl(String path) {
+    if (path.isEmpty) return "";
+    if (path.startsWith("http")) return path;
+    final cleanPath = path.startsWith("/") ? path : "/$path";
+    return "https://image.tmdb.org/t/p/w200$cleanPath";
   }
 
   @override
@@ -120,7 +168,9 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
 
     final filtered = _showtimes.where((s) {
       // Đảm bảo chỉ hiển thị đúng ngày đang chọn
-      final itemDate = (s['date'] ?? (s['show_id']?.toString().split('T').first ?? '')).toString();
+      final itemDate =
+          (s['date'] ?? (s['show_id']?.toString().split('T').first ?? ''))
+              .toString();
       if (itemDate.isNotEmpty && itemDate != selectedDateStr) {
         return false;
       }
@@ -136,6 +186,18 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
       return true;
     }).toList();
 
+    // Nếu đang xem ngày hôm nay: Ưu tiên suất phim đang chiếu lên đầu danh sách
+    if (isToday) {
+      filtered.sort((a, b) {
+        final pA = _getShowtimePriority(a, now);
+        final pB = _getShowtimePriority(b, now);
+        if (pA != pB) return pA.compareTo(pB);
+        final sA = (a['start_time'] ?? a['show_id'] ?? '').toString();
+        final sB = (b['start_time'] ?? b['show_id'] ?? '').toString();
+        return sA.compareTo(sB);
+      });
+    }
+
     final roomFilters = [
       {'id': 'all', 'label': 'Tất cả phòng'},
       {'id': 'room1', 'label': 'Phòng chiếu số 1'},
@@ -150,7 +212,8 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
           children: [
             CSScreenHeader(
               title: 'Lịch chiếu phim',
-              subtitle: '${_formatDisplayDate(_selectedDate)} · ${filtered.length} suất chiếu',
+              subtitle:
+                  '${_formatDisplayDate(_selectedDate)} · ${filtered.length} suất chiếu',
               trailingIcon: Icons.calendar_month_outlined,
               onTrailing: _pickCustomDate,
             ),
@@ -212,7 +275,9 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                       avatar: Icon(
                         Icons.event_outlined,
                         size: 14,
-                        color: isCustomDate ? Colors.white : CSAppColors.primary,
+                        color: isCustomDate
+                            ? Colors.white
+                            : CSAppColors.primary,
                       ),
                       label: Text(
                         isCustomDate
@@ -221,10 +286,14 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isCustomDate ? Colors.white : CSAppColors.muted,
+                          color: isCustomDate
+                              ? Colors.white
+                              : CSAppColors.muted,
                         ),
                       ),
-                      backgroundColor: isCustomDate ? CSAppColors.primary : CSAppColors.surface,
+                      backgroundColor: isCustomDate
+                          ? CSAppColors.primary
+                          : CSAppColors.surface,
                       onPressed: _pickCustomDate,
                     ),
                   ],
@@ -267,7 +336,8 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                     selected: isSelected,
                     selectedColor: CSAppColors.primary,
                     backgroundColor: CSAppColors.surface,
-                    onSelected: (_) => setState(() => _selectedRoomFilter = f['id']!),
+                    onSelected: (_) =>
+                        setState(() => _selectedRoomFilter = f['id']!),
                   );
                 },
               ),
@@ -277,99 +347,191 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : filtered.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.event_busy_outlined,
-                                  size: 48,
-                                  color: CSAppColors.muted,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Không có suất chiếu nào trong ${_formatDisplayDate(_selectedDate).toLowerCase()}.',
-                                  style: const TextStyle(color: CSAppColors.muted, fontSize: 13),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 12),
-                                OutlinedButton.icon(
-                                  onPressed: _loadShowtimes,
-                                  icon: const Icon(Icons.refresh, size: 16),
-                                  label: const Text('Tải lại'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: CSAppColors.primary,
-                                    side: const BorderSide(color: CSAppColors.primary),
-                                  ),
-                                ),
-                              ],
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.event_busy_outlined,
+                              size: 48,
+                              color: CSAppColors.muted,
                             ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadShowtimes,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final s = filtered[index];
-                              final movieName = s['movie_name']?.toString() ?? 'Suất chiếu';
-                              final roomName = formatRoomName(s['room_id']?.toString() ?? s['room_name']?.toString());
-                              final startTime = s['start_time']?.toString() ?? '08:30';
-                              final endTime = s['end_time']?.toString() ?? '10:15';
-                              final duration = (s['duration_minutes'] as int?) ?? 105;
-                              final breakMins = (s['break_minutes'] as int?) ?? 15;
-                              final showId = s['show_id']?.toString() ?? s['id']?.toString() ?? '';
+                            const SizedBox(height: 12),
+                            Text(
+                              'Không có suất chiếu nào trong ${_formatDisplayDate(_selectedDate).toLowerCase()}.',
+                              style: const TextStyle(
+                                color: CSAppColors.muted,
+                                fontSize: 13,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: _loadShowtimes,
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Tải lại'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: CSAppColors.primary,
+                                side: const BorderSide(
+                                  color: CSAppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadShowtimes,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final s = filtered[index];
+                          final movieName =
+                              s['movie_name']?.toString() ?? 'Suất chiếu';
+                          final roomName = formatRoomName(
+                            s['room_id']?.toString() ??
+                                s['room_name']?.toString(),
+                          );
+                          final startTime =
+                              s['start_time']?.toString() ?? '08:30';
+                          final endTime = s['end_time']?.toString() ?? '10:15';
+                          final duration =
+                              (s['duration_minutes'] as int?) ?? 105;
+                          final breakMins = (s['break_minutes'] as int?) ?? 15;
+                          final showId =
+                              s['show_id']?.toString() ??
+                              s['id']?.toString() ??
+                              '';
 
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: CSAppCard(
-                                  onTap: () => widget.onMovieSelected?.call(s),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              movieName,
-                                              style: const TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
+                          final isScreening =
+                              isToday && _getShowtimePriority(s, now) == 0;
+                          final posterPath = (s["poster_path"] ?? "")
+                              .toString();
+                          final posterUrl = _formatPosterUrl(posterPath);
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: CSAppCard(
+                              onTap: () => widget.onMovieSelected?.call(s),
+                              borderColor: isScreening
+                                  ? const Color(0xFF10B981)
+                                  : null,
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // 1. Poster ảnh mô tả cho phim
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      width: 58,
+                                      height: 84,
+                                      color: const Color(0xFF1F2638),
+                                      child: posterUrl.isNotEmpty
+                                          ? Image.network(
+                                              posterUrl,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => const Center(
+                                                    child: Icon(
+                                                      Icons.movie_outlined,
+                                                      color: Colors.white38,
+                                                      size: 26,
+                                                    ),
+                                                  ),
+                                            )
+                                          : const Center(
+                                              child: Icon(
+                                                Icons.movie_outlined,
+                                                color: Colors.white38,
+                                                size: 26,
                                               ),
                                             ),
-                                          ),
-                                          CSStatusTag(
-                                            text: '$startTime - $endTime',
-                                            color: CSAppColors.primary,
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        '$roomName · Thời lượng: ${_formatDuration(duration)} · Nghỉ chuyển suất: ${breakMins}p',
-                                        style: const TextStyle(
-                                          color: CSAppColors.muted,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        'Mã suất: $showId',
-                                        style: const TextStyle(
-                                          color: CSAppColors.muted,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                                  const SizedBox(width: 12),
+
+                                  // 2. Thông tin chi tiết suất chiếu
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                movieName,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            CSStatusTag(
+                                              text: isScreening
+                                                  ? "🟢 Đang chiếu"
+                                                  : "$startTime - $endTime",
+                                              color: isScreening
+                                                  ? const Color(0xFF10B981)
+                                                  : CSAppColors.primary,
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          "$roomName · ${_formatDuration(duration)}",
+                                          style: const TextStyle(
+                                            color: CSAppColors.muted,
+                                            fontSize: 11.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                isScreening
+                                                    ? "Giờ: $startTime - $endTime · Nghỉ: ${breakMins}p"
+                                                    : "Mã: $showId · Nghỉ chuyển: ${breakMins}p",
+                                                style: const TextStyle(
+                                                  color: CSAppColors.muted,
+                                                  fontSize: 10,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const Icon(
+                                              Icons.chevron_right,
+                                              size: 18,
+                                              color: Colors.white38,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
         ),

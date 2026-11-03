@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/network/api_client.dart';
 import 'package:mobile_app/core/utils/room_utils.dart';
@@ -114,9 +115,23 @@ class _CSSeatMapScreenState extends State<CSSeatMapScreen> {
     final reported = <String>{};
     for (var inc in incidents) {
       if (inc['category'] == 'seat_damage' && inc['seat_ids'] != null) {
-        if (inc['seat_ids'] is List) {
-          for (var s in inc['seat_ids']) {
-            reported.add(s.toString());
+        final rawSeats = inc['seat_ids'];
+        if (rawSeats is List) {
+          for (var s in rawSeats) {
+            reported.add(s.toString().trim());
+          }
+        } else if (rawSeats is String && rawSeats.trim().isNotEmpty) {
+          try {
+            final parsed = jsonDecode(rawSeats);
+            if (parsed is List) {
+              for (var s in parsed) {
+                reported.add(s.toString().trim());
+              }
+            }
+          } catch (_) {
+            for (var s in rawSeats.split(RegExp(r'[,; ]+'))) {
+              if (s.trim().isNotEmpty) reported.add(s.trim());
+            }
           }
         }
       }
@@ -329,28 +344,7 @@ class _CSSeatMapScreenState extends State<CSSeatMapScreen> {
               CSAppCard(
                 child: Column(
                   children: [
-                    // Màn hình chiếu biểu diễn
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      decoration: BoxDecoration(
-                        color: CSAppColors.border,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text(
-                        'MÀN HÌNH CHIẾU',
-                        style: TextStyle(
-                          color: CSAppColors.muted,
-                          fontSize: 10,
-                          letterSpacing: 2,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Lưới hiển thị 136 ghế
+                    // Lưới hiển thị ghế (kèm vòm màn hình chiếu chuẩn camera bên trong)
                     _isLoading
                         ? const Padding(
                             padding: EdgeInsets.symmetric(vertical: 40),
@@ -358,9 +352,11 @@ class _CSSeatMapScreenState extends State<CSSeatMapScreen> {
                           )
                         : CSSeatMap(
                             roomId: _cleanRoomId,
+                            showWarnings: true,
                             occupiedSeats: _occupiedSeats,
                             warningSeats: _warningSeats,
                             brokenSeats: _reportedSeats.toList(),
+                            reportedSeats: _reportedSeats,
                             onSeatTapped: (seatId) {
                               ScaffoldMessenger.of(context).hideCurrentSnackBar();
                               final isOcc = _occupiedSeats.contains(seatId);

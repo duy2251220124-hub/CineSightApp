@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/widgets/cs_primary_button.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
@@ -33,6 +35,8 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   bool _isLoading = false;
+  File? _imageFile;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -56,6 +60,29 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
     _titleController.dispose();
     _descController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        setState(() {
+          _imageFile = File(picked.path);
+        });
+      }
+    } catch (e) {
+      debugPrint('[IMAGE_PICKER] Lỗi chọn ảnh: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể truy cập camera/thư viện: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _openSeatPicker() async {
@@ -94,6 +121,9 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
     if (_severity == 1) severityStr = 'medium';
     if (_severity == 2) severityStr = 'high';
 
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
     final result = await ApiClient.createIncident(
       category: _category,
       severity: severityStr,
@@ -109,23 +139,35 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
       seatIds: _seats,
     );
 
-    if (mounted) {
-      setState(() => _isLoading = false);
+    if (!mounted) return;
 
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã tạo sự cố thành công')),
-        );
-        if (widget.onIncidentAdded != null) {
-          widget.onIncidentAdded!();
-        } else {
-          Navigator.of(context).pop(true);
+    if (result['success'] == true) {
+      final dynamic rawIncId = result['data']?['id'] ?? result['data']?['incident_id'];
+      if (_imageFile != null && rawIncId != null) {
+        final int? incId = rawIncId is int ? rawIncId : int.tryParse(rawIncId.toString());
+        if (incId != null) {
+          await ApiClient.uploadIncidentPhoto(incId, _imageFile!.path);
         }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['error'] ?? 'Lỗi không xác định')),
-        );
       }
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Đã tạo sự cố & lưu hiện trường thành công!'),
+          backgroundColor: CSAppColors.success,
+        ),
+      );
+      if (widget.onIncidentAdded != null) {
+        widget.onIncidentAdded!();
+      } else {
+        navigator.pop(true);
+      }
+    } else {
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(content: Text(result['error'] ?? 'Lỗi không xác định')),
+      );
     }
   }
 
@@ -246,6 +288,89 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                         }),
                       ),
                       const SizedBox(height: 12),
+                      const CSFormLabel('ẢNH CHỤP HIỆN TRƯỜNG / THỰC TẾ'),
+                      if (_imageFile == null)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _pickImage(ImageSource.camera),
+                                icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                                label: const Text('Chụp ảnh thực tế', style: TextStyle(fontSize: 12)),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _pickImage(ImageSource.gallery),
+                                icon: const Icon(Icons.photo_library_outlined, size: 16),
+                                label: const Text('Chọn từ máy', style: TextStyle(fontSize: 12)),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            color: CSAppColors.surfaceStrong,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: CSAppColors.border),
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Stack(
+                                alignment: Alignment.topRight,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.file(
+                                      _imageFile!,
+                                      height: 180,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Xóa ảnh',
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.black87,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    icon: const Icon(Icons.close, size: 18),
+                                    onPressed: () => setState(() => _imageFile = null),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Ảnh: ${_imageFile!.path.split(RegExp(r"[/\\]")).last}',
+                                      style: const TextStyle(color: CSAppColors.muted, fontSize: 11),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: () => _pickImage(ImageSource.camera),
+                                    icon: const Icon(Icons.refresh, size: 14),
+                                    label: const Text('Đổi ảnh', style: TextStyle(fontSize: 11)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),

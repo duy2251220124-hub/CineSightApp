@@ -1,27 +1,20 @@
 import { useState, useEffect, useMemo } from 'react';
-import { analyzeRoom, healthCheck, getActiveAlerts, resolveAlert, getShowtimes } from '../api/cineSightApi';
+import { healthCheck, getActiveAlertsData, resolveAlert, resolveRoomAlerts } from '../api/cineSightApi';
 import {
   ShieldAlert,
   ShieldCheck,
   UserX,
   UserMinus,
   Users,
-  Sparkles,
   Search,
-  Check,
-  Upload
+  Check
 } from '../components/Icons';
 import '../styles/dashboard.css';
 
 export default function Dashboard() {
   const [serverOnline, setServerOnline] = useState(false);
-  const [selectedRoom, setSelectedRoom] = useState('room1');
-  const [showId, setShowId] = useState('2026-10-05T19:30');
-  const [roomShowtimes, setRoomShowtimes] = useState([]);
-  const [loadingShowtimes, setLoadingShowtimes] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [alerts, setAlerts] = useState([]);
+  const [groupedAlerts, setGroupedAlerts] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Filter & Search toolbar state
@@ -52,11 +45,12 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Tải danh sách cảnh báo
+  // Tải danh sách cảnh báo (cả bản ghi chi tiết và nhóm theo phòng)
   const fetchAlerts = async () => {
     try {
-      const data = await getActiveAlerts();
-      setAlerts(data);
+      const data = await getActiveAlertsData();
+      setAlerts(data.alerts || []);
+      setGroupedAlerts(data.grouped_alerts || []);
     } catch (e) {
       console.error('Lỗi tải danh sách cảnh báo:', e);
     }
@@ -68,53 +62,21 @@ export default function Dashboard() {
     return () => clearInterval(alertTimer);
   }, []);
 
-  // Tải danh sách suất chiếu của phòng được chọn
-  useEffect(() => {
-    let isMounted = true;
-    const fetchShows = async () => {
-      setLoadingShowtimes(true);
-      try {
-        const shows = await getShowtimes(selectedRoom);
-        if (isMounted) {
-          const list = shows || [];
-          setRoomShowtimes(list);
-          if (list.length > 0) {
-            setShowId(prev => {
-              const exists = list.some(s => s.show_id === prev);
-              return exists ? prev : list[0].show_id;
-            });
-          }
-        }
-      } catch (e) {
-        console.error('Lỗi tải danh sách suất chiếu:', e);
-      } finally {
-        if (isMounted) setLoadingShowtimes(false);
-      }
-    };
-    fetchShows();
-    return () => { isMounted = false; };
-  }, [selectedRoom]);
-
-  const handleAnalyze = async () => {
-    if (!showId) return alert('Vui lòng chọn suất chiếu trước khi chạy phân tích.');
-    if (!imageFile) return alert('Vui lòng chọn ảnh snapshot phòng chiếu trước khi chạy.');
-    setIsAnalyzing(true);
-    try {
-      await analyzeRoom(selectedRoom, showId, imageFile);
-      await fetchAlerts();
-    } catch (e) {
-      alert('Lỗi AI: ' + e.message);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
   const handleResolve = async (id) => {
     try {
       await resolveAlert(id);
       await fetchAlerts();
     } catch (e) {
       alert('Không thể cập nhật trạng thái: ' + e.message);
+    }
+  };
+
+  const handleResolveRoom = async (roomId, showId) => {
+    try {
+      await resolveRoomAlerts(roomId, showId);
+      await fetchAlerts();
+    } catch (e) {
+      alert('Không thể xử lý cảnh báo phòng: ' + (e.response?.data?.error || e.message));
     }
   };
 
@@ -176,26 +138,13 @@ export default function Dashboard() {
             color: '#1E293B',
             boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05)'
           }}>
-            <span style={{ position: 'relative', display: 'flex', width: 8, height: 8 }}>
-              {serverOnline && (
-                <span style={{
-                  position: 'absolute',
-                  inset: 0,
-                  borderRadius: 9999,
-                  backgroundColor: '#10B981',
-                  opacity: 0.75,
-                  animation: 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite'
-                }} />
-              )}
-              <span style={{
-                position: 'relative',
-                display: 'inline-flex',
-                width: 8,
-                height: 8,
-                borderRadius: 9999,
-                backgroundColor: serverOnline ? '#10B981' : '#DC2626'
-              }} />
-            </span>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              backgroundColor: serverOnline ? '#10B981' : '#DC2626',
+              flexShrink: 0
+            }} />
             <span>{serverOnline ? 'Hệ thống AI sẵn sàng' : 'Mất kết nối máy chủ'}</span>
           </div>
 
@@ -229,7 +178,6 @@ export default function Dashboard() {
           background: '#FFFFFF',
           borderRadius: 8,
           border: '1px solid #CBD5E1',
-          borderTop: '3px solid #2563EB',
           padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
@@ -270,7 +218,6 @@ export default function Dashboard() {
           background: '#FFFFFF',
           borderRadius: 8,
           border: '1px solid #CBD5E1',
-          borderTop: '3px solid #DC2626',
           padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
@@ -314,7 +261,6 @@ export default function Dashboard() {
           background: '#FFFFFF',
           borderRadius: 8,
           border: '1px solid #CBD5E1',
-          borderTop: '3px solid #D97706',
           padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
@@ -358,7 +304,6 @@ export default function Dashboard() {
           background: '#FFFFFF',
           borderRadius: 8,
           border: '1px solid #CBD5E1',
-          borderTop: '3px solid #2563EB',
           padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
@@ -398,133 +343,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 3. KHU VỰC KIỂM TRA THỦ CÔNG (MANUAL SCAN) */}
-      <div style={{
-        background: '#FFFFFF',
-        borderRadius: 8,
-        border: '1px solid #CBD5E1',
-        padding: '14px 18px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 14,
-        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.08)',
-        flexShrink: 0
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{
-            width: 32,
-            height: 32,
-            borderRadius: 6,
-            background: '#EFF6FF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--brand-blue)'
-          }}>
-            <Sparkles size={18} />
-          </span>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>
-              Kiểm tra thủ công bằng Snapshot Camera
-            </div>
-            <div style={{ fontSize: 12, color: '#475569', fontWeight: 500 }}>
-              Nạp ảnh camera phòng chiếu để AI đối soát tức thời với hệ thống bán vé
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* Chọn phòng chiếu */}
-          <select
-            value={selectedRoom}
-            onChange={e => setSelectedRoom(e.target.value)}
-            className="soc-input"
-            style={{ width: 170, fontSize: 13, fontWeight: 600 }}
-          >
-            <option value="room1">Phòng chiếu 1</option>
-            <option value="room2">Phòng chiếu 2</option>
-            <option value="room3">Phòng chiếu 3</option>
-            <option value="room4">Phòng chiếu 4</option>
-          </select>
-
-          {/* Chọn suất chiếu */}
-          <select
-            value={showId}
-            onChange={e => setShowId(e.target.value)}
-            className="soc-input"
-            style={{ width: 230, fontSize: 13, fontWeight: 500 }}
-            disabled={loadingShowtimes}
-          >
-            {roomShowtimes.length === 0 ? (
-              <option value={showId}>{loadingShowtimes ? 'Đang tải suất chiếu...' : (showId || 'Không có suất chiếu')}</option>
-            ) : (
-              roomShowtimes.map(st => (
-                <option key={st.show_id || st.id} value={st.show_id}>
-                  {st.start_time || st.show_id.split('T')[1]} - {st.movie_title || st.title_vi || 'Phim'} ({st.date || st.show_id.split('T')[0]})
-                </option>
-              ))
-            )}
-          </select>
-
-          {/* Vùng chọn file có hiển thị tên file rõ ràng */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: '#F8FAFC',
-            border: '1px solid #CBD5E1',
-            borderRadius: 6,
-            padding: '4px 10px 4px 6px',
-            gap: 8
-          }}>
-            <label style={{
-              background: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              color: '#0F172A',
-              padding: '5px 12px',
-              borderRadius: 4,
-              fontSize: 12.5,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5
-            }}>
-              <Upload size={14} />
-              <span>Chọn ảnh...</span>
-              <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])} hidden />
-            </label>
-            <span
-              style={{
-                fontSize: 12.5,
-                color: imageFile ? '#0F172A' : '#475569',
-                maxWidth: 200,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                fontWeight: imageFile ? 600 : 500
-              }}
-              title={imageFile ? imageFile.name : 'Chưa chọn file'}
-            >
-              {imageFile ? imageFile.name : 'Chưa chọn tệp snapshot'}
-            </span>
-          </div>
-
-          {/* Nút Chạy AI màu thương hiệu #2563EB */}
-          <button
-            onClick={handleAnalyze}
-            disabled={isAnalyzing || !serverOnline}
-            className="soc-btn primary"
-            style={{ fontSize: 13, padding: '8px 18px' }}
-          >
-            <Sparkles size={15} />
-            <span>{isAnalyzing ? 'ĐANG XỬ LÝ...' : 'CHẠY AI'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 4. BẢNG CẢNH BÁO CHỜ XỬ LÝ (LIVE FEED) VỚI TOOLBAR */}
+      {/* 3. BẢNG CẢNH BÁO CHỜ XỬ LÝ (LIVE FEED) VỚI TOOLBAR */}
       <div className="soc-panel soc-feed">
         {/* THANH CÔNG CỤ TRÊN ĐẦU BẢNG (TOOLBAR) */}
         <div style={{
@@ -624,6 +443,73 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* PHIẾU ĐIỀU HÀNH PHÒNG CHIẾU CÓ CẢNH BÁO (GOM NHÓM & XỬ LÝ 1 CHẠM) */}
+        {groupedAlerts.length > 0 && (
+          <div style={{ padding: '0 16px 12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {groupedAlerts.map(g => (
+              <div
+                key={`${g.room_id}-${g.show_id}`}
+                style={{
+                  background: '#FEF2F2',
+                  border: '1.5px solid #FECACA',
+                  borderRadius: 8,
+                  padding: '12px 16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 800, fontSize: 13.5, color: '#991B1B' }}>
+                      🚨 {g.room_id.toUpperCase()} • SUẤT {g.show_id}
+                    </span>
+                    <span style={{
+                      background: '#FEE2E2',
+                      color: '#991B1B',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      border: '1px solid #FECACA',
+                    }}>
+                      {g.total_alerts} ghế bất thường
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontSize: 13, color: '#334155', flexWrap: 'wrap' }}>
+                    <span>🎟️ Số vé đã quét: <strong style={{ color: '#0F172A' }}>{g.scanned_tickets_count}</strong></span>
+                    <span>👥 Số người hiện có: <strong style={{ color: '#0F172A' }}>{g.detected_people_count}</strong></span>
+                    <span>⚠️ Ghế cảnh báo: <strong style={{ color: '#DC2626' }}>{g.all_alerted_seats.join(', ') || 'N/A'}</strong></span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleResolveRoom(g.room_id, g.show_id)}
+                  style={{
+                    background: '#DC2626',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    fontSize: 12.5,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)',
+                  }}
+                >
+                  <Check size={14} />
+                  <span>XỬ LÝ TOÀN BỘ PHÒNG ({g.total_alerts} GHẾ)</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* NỘI DUNG BẢNG */}
         <div className="table-wrapper">

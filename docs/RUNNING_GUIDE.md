@@ -1,5 +1,5 @@
 
-### BƯỚC 1: Bật AI Server (Backend)
+ ### Bật AI Server (Backend)
 
 1. Mở Terminal (PowerShell) và gõ lệnh sau:
    ```powershell
@@ -9,7 +9,7 @@
    python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
-### BƯỚC 2: Bật Ngrok (Cầu nối Internet cho Mobile App)
+### Bật Ngrok (Cầu nối Internet cho Mobile App)
 
 Do Mobile App (chạy trên điện thoại hoặc máy ảo) cần đường dẫn Internet để chọc về máy tính của bạn, ta cần Ngrok tạo 1 "đường hầm" (tunnel).
 
@@ -17,15 +17,9 @@ Do Mobile App (chạy trên điện thoại hoặc máy ảo) cần đường d�
    ```powershell
    cd c:\CineSightApp
    .\ngrok_bin\ngrok http 8000
-   ```
-
-2. **Cách xác nhận & lấy URL mới:**
-   - Trong màn hình đen của ngrok, tìm dòng có chữ `Forwarding`. Bạn sẽ thấy link dạng `https://xxxx-xxxx.ngrok-free.app`.
-   - **Mẹo kiểm tra chắc chắn:** Mở trình duyệt, vào `http://127.0.0.1:4040/api/tunnels`. Bạn sẽ thấy chi tiết cấu hình ngrok đang trỏ về đúng `localhost:8000`.
-   
 ---
 
-### BƯỚC 3: Bật Web Admin (Frontend)
+### Bật Web Admin (Frontend)
 
 Trang quản trị chạy độc lập và sẽ giao tiếp trực tiếp với AI Server trên máy tính.
 
@@ -34,7 +28,7 @@ Trang quản trị chạy độc lập và sẽ giao tiếp trực tiếp với 
    cd c:\CineSightApp\web_admin
    npm run dev
    ```
-### BƯỚC 4: Chạy Mobile App
+### Chạy Mobile App
 
 1. Mở cửa sổ Terminal THỨ 4 (hoặc chạy trực tiếp qua VS Code / Android Studio):
    ```powershell
@@ -43,5 +37,7 @@ Trang quản trị chạy độc lập và sẽ giao tiếp trực tiếp với 
 
 
 ---
-
+### update lịch phim mới cho adminweb
+   cd C:\CineSightApp
+python ai_service/tools/auto_update_movies.py
 

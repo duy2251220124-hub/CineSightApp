@@ -15,6 +15,9 @@ SHIFT_LABELS = {
 def _connect():
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 
@@ -154,7 +157,9 @@ def init_db():
             name TEXT,
             role TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            shift TEXT
+            shift TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_seen_at TEXT
         )
     """)
 
@@ -162,6 +167,11 @@ def init_db():
     columns = [row[1] for row in cursor.fetchall()]
     if 'shift' not in columns:
         cursor.execute("ALTER TABLE employees ADD COLUMN shift TEXT NULL")
+    # Vấn đề 6: Ngưng hoạt động mềm (soft-deactivate) và dấu vết hoạt động gần nhất
+    if 'is_active' not in columns:
+        cursor.execute("ALTER TABLE employees ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+    if 'last_seen_at' not in columns:
+        cursor.execute("ALTER TABLE employees ADD COLUMN last_seen_at TEXT NULL")
 
     # Làm sạch mã ca cũ không hợp lệ (ví dụ 'morning' -> NULL)
     cursor.execute(
@@ -204,6 +214,8 @@ def init_db():
     inc_cols = [row[1] for row in cursor.execute("PRAGMA table_info(incidents)").fetchall()]
     if "reporter_shift" not in inc_cols:
         cursor.execute("ALTER TABLE incidents ADD COLUMN reporter_shift TEXT NULL")
+    if "image_path" not in inc_cols:
+        cursor.execute("ALTER TABLE incidents ADD COLUMN image_path TEXT NULL")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ai_inference_logs (
@@ -223,6 +235,7 @@ def init_db():
             inference_time_ms REAL NOT NULL,
             yolo_time_ms REAL NULL,
             mapping_time_ms REAL NULL,
+            trigger_source TEXT NOT NULL DEFAULT 'MANUAL',
             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
             FOREIGN KEY (room_id, show_id) REFERENCES showtimes(room_id, show_id) ON DELETE CASCADE
         )
@@ -232,6 +245,8 @@ def init_db():
         cursor.execute("ALTER TABLE ai_inference_logs ADD COLUMN yolo_time_ms REAL NULL")
     if "mapping_time_ms" not in log_cols:
         cursor.execute("ALTER TABLE ai_inference_logs ADD COLUMN mapping_time_ms REAL NULL")
+    if "trigger_source" not in log_cols:
+        cursor.execute("ALTER TABLE ai_inference_logs ADD COLUMN trigger_source TEXT NOT NULL DEFAULT 'MANUAL'")
 
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_ai_logs_room_show ON ai_inference_logs(room_id, show_id)"
@@ -328,18 +343,231 @@ def save_alerts(room_id: str, show_id: str, alert_type: str, seats: list):
     finally:
         conn.close()
 
+
+def refresh_showtime_alerts(room_id: str, show_id: str, alert_result: dict) -> dict:
+    """Quy tắc 15.5 (Idempotent Alert Refresh):
+    Khi phân tích lại cùng (room_id, show_id) ở mốc sau (VD: T-3 sau T-5):
+    - Tự động đóng (resolved = 1) các cảnh báo đang mở (resolved = 0) nếu ghế đó nay đã hợp lệ.
+    - Lưu các cảnh báo mới phát sinh mà không tạo trùng lặp.
+    """
+    conn = _connect()
+    conn.row_factory = sqlite3.Row
+    auto_resolved = 0
+    try:
+        cursor = conn.cursor()
+        clean_room = _require_showtime_exists(cursor, room_id, show_id)
+        illegal_set = set(alert_result.get("illegal_occupants") or [])
+        missing_set = set(alert_result.get("missing_guests") or [])
+        over_cap = bool(alert_result.get("over_capacity"))
+
+        open_rows = cursor.execute(
+            "SELECT id, alert_type, seat_id FROM alerts WHERE room_id=? AND show_id=? AND resolved=0",
+            (clean_room, str(show_id).strip()),
+        ).fetchall()
+
+        ids_to_resolve = []
+        for r in open_rows:
+            atype = r["alert_type"]
+            sid = r["seat_id"]
+            if atype == "illegal_occupant" and sid not in illegal_set:
+                ids_to_resolve.append(r["id"])
+            elif atype == "missing_guest" and sid not in missing_set:
+                ids_to_resolve.append(r["id"])
+            elif atype == "over_capacity" and not over_cap:
+                ids_to_resolve.append(r["id"])
+
+        if ids_to_resolve:
+            placeholders = ",".join("?" for _ in ids_to_resolve)
+            cursor.execute(
+                f"UPDATE alerts SET resolved = 1 WHERE id IN ({placeholders})",
+                tuple(ids_to_resolve),
+            )
+            auto_resolved = len(ids_to_resolve)
+        conn.commit()
+    finally:
+        conn.close()
+
+    if alert_result.get("illegal_occupants"):
+        save_alerts(room_id, show_id, "illegal_occupant", alert_result["illegal_occupants"])
+    if alert_result.get("missing_guests"):
+        save_alerts(room_id, show_id, "missing_guest", alert_result["missing_guests"])
+    if alert_result.get("over_capacity"):
+        save_alerts(room_id, show_id, "over_capacity", [None])
+
+    return {"auto_resolved_count": auto_resolved}
+
+def cleanup_finished_showtimes_alerts(cursor):
+    """Tự động đóng (resolved = 1) tất cả cảnh báo của các suất chiếu đã kết thúc trong quá khứ,
+    tránh rò rỉ cảnh báo của ca trước sang ca tiếp theo."""
+    try:
+        now_iso = datetime.datetime.now().astimezone().isoformat()
+        cursor.execute("""
+            UPDATE alerts 
+            SET resolved = 1 
+            WHERE resolved = 0 
+              AND show_id IN (
+                  SELECT show_id FROM showtimes WHERE end_at < ?
+              )
+        """, (now_iso,))
+    except Exception:
+        pass
+
 def get_active_alerts(room_id: str = None):
     clean_room = _normalize_room_id(room_id)
     conn = _connect()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
+    cleanup_finished_showtimes_alerts(cursor)
+    conn.commit()
     if clean_room:
         cursor.execute("SELECT * FROM alerts WHERE room_id=? AND resolved=0 ORDER BY timestamp DESC", (clean_room,))
     else:
         cursor.execute("SELECT * FROM alerts WHERE resolved=0 ORDER BY timestamp DESC")
     rows = cursor.fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    
+    alerts_list = [dict(r) for r in rows]
+    # Gắn thêm context (số vé đã quét, số người AI đếm, chùm ghế vi phạm) để phục vụ thông báo
+    if alerts_list:
+        try:
+            grouped = get_grouped_active_alerts(room_id)
+            meta_map = {(g["room_id"], g["show_id"]): g for g in grouped}
+            for a in alerts_list:
+                g = meta_map.get((a.get("room_id"), a.get("show_id")))
+                if g:
+                    a["scanned_tickets_count"] = g["scanned_tickets_count"]
+                    a["detected_people_count"] = g["detected_people_count"]
+                    a["room_alert_count"] = g["total_alerts"]
+                    a["room_illegal_seats"] = g["illegal_seats"]
+                    a["room_missing_seats"] = g["missing_seats"]
+                    a["all_alerted_seats"] = g["all_alerted_seats"]
+                else:
+                    a["scanned_tickets_count"] = 0
+                    a["detected_people_count"] = 0
+                    a["room_alert_count"] = 1
+                    a["room_illegal_seats"] = [a["seat_id"]] if a.get("seat_id") else []
+                    a["room_missing_seats"] = []
+                    a["all_alerted_seats"] = [a["seat_id"]] if a.get("seat_id") else []
+        except Exception:
+            pass
+    return alerts_list
+
+def get_grouped_active_alerts(room_id: str = None) -> list:
+    """Gom nhóm các cảnh báo đang mở (resolved = 0) theo từng Phòng & Suất chiếu.
+    Mỗi nhóm cung cấp đầy đủ 3 chỉ số theo yêu cầu:
+    1. scanned_tickets_count: Số vé đã quét của rạp này (Tập A)
+    2. detected_people_count: Số người hiện có trong rạp (Camera AI đếm)
+    3. all_alerted_seats: Danh sách các ghế được cảnh báo (illegal/missing)
+    """
+    clean_room = _normalize_room_id(room_id)
+    conn = _connect()
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.cursor()
+        cleanup_finished_showtimes_alerts(cursor)
+        conn.commit()
+        if clean_room:
+            cursor.execute(
+                "SELECT * FROM alerts WHERE room_id = ? AND resolved = 0 ORDER BY timestamp DESC",
+                (clean_room,),
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM alerts WHERE resolved = 0 ORDER BY timestamp DESC"
+            )
+        rows = [dict(r) for r in cursor.fetchall()]
+
+        groups = {}
+        for r in rows:
+            key = (r["room_id"], r["show_id"])
+            if key not in groups:
+                groups[key] = {
+                    "room_id": r["room_id"],
+                    "show_id": r["show_id"],
+                    "latest_timestamp": r["timestamp"],
+                    "alert_ids": [],
+                    "illegal_seats": [],
+                    "missing_seats": [],
+                    "over_capacity": False,
+                    "raw_alerts": [],
+                }
+            g = groups[key]
+            g["alert_ids"].append(r["id"])
+            g["raw_alerts"].append(r)
+            atype = r.get("alert_type")
+            sid = r.get("seat_id")
+            if atype == "illegal_occupant" and sid:
+                if sid not in g["illegal_seats"]:
+                    g["illegal_seats"].append(sid)
+            elif atype == "missing_guest" and sid:
+                if sid not in g["missing_seats"]:
+                    g["missing_seats"].append(sid)
+            elif atype == "over_capacity":
+                g["over_capacity"] = True
+
+        result = []
+        for (r_id, s_id), g in groups.items():
+            # 1. Số vé đã quét của rạp này
+            cursor.execute(
+                "SELECT COUNT(*) FROM tickets WHERE room_id = ? AND show_id = ?",
+                (r_id, s_id),
+            )
+            scanned_count = cursor.fetchone()[0]
+
+            # 2. Số người hiện có trong rạp (lấy từ log AI mới nhất của suất này)
+            cursor.execute(
+                """
+                SELECT detected_heads_count, mapped_seats_count 
+                FROM ai_inference_logs 
+                WHERE room_id = ? AND show_id = ? 
+                ORDER BY id DESC LIMIT 1
+                """,
+                (r_id, s_id),
+            )
+            log_row = cursor.fetchone()
+            if log_row:
+                detected_count = log_row[0] if log_row[0] is not None else log_row[1]
+            else:
+                detected_count = max(0, scanned_count + len(g["illegal_seats"]) - len(g["missing_seats"]))
+
+            g["illegal_seats"].sort()
+            g["missing_seats"].sort()
+            all_seats = list(dict.fromkeys(g["illegal_seats"] + g["missing_seats"]))
+
+            result.append({
+                "room_id": r_id,
+                "show_id": s_id,
+                "latest_timestamp": g["latest_timestamp"],
+                "scanned_tickets_count": scanned_count,
+                "detected_people_count": detected_count,
+                "total_alerts": len(g["alert_ids"]),
+                "alert_ids": g["alert_ids"],
+                "illegal_seats": g["illegal_seats"],
+                "missing_seats": g["missing_seats"],
+                "all_alerted_seats": all_seats,
+                "over_capacity": g["over_capacity"],
+            })
+
+        return result
+    finally:
+        conn.close()
+
+def resolve_room_alerts(room_id: str, show_id: str) -> int:
+    """Xử lý hàng loạt toàn bộ cảnh báo đang mở của một phòng & suất chiếu (One-Tap Resolve)."""
+    clean_room = _normalize_room_id(room_id)
+    clean_show = str(show_id).strip()
+    conn = _connect()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE alerts SET resolved = 1 WHERE room_id = ? AND show_id = ? AND resolved = 0",
+            (clean_room, clean_show),
+        )
+        count = cursor.rowcount
+        conn.commit()
+        return count
+    finally:
+        conn.close()
 
 def get_all_alerts(room_id: str = None, alert_type: str = None, status: str = None):
     conn = _connect()
@@ -376,7 +604,11 @@ def resolve_alert(alert_id: int):
     conn = _connect()
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE alerts SET resolved=1 WHERE id=?", (alert_id,))
+        row = cursor.execute("SELECT room_id, show_id FROM alerts WHERE id=?", (alert_id,)).fetchone()
+        if row and row[0] and row[1]:
+            cursor.execute("UPDATE alerts SET resolved=1 WHERE room_id=? AND show_id=? AND resolved=0", (row[0], row[1]))
+        else:
+            cursor.execute("UPDATE alerts SET resolved=1 WHERE id=?", (alert_id,))
         conn.commit()
     finally:
         conn.close()
@@ -396,23 +628,84 @@ def update_config(key: str, value: str):
     conn.commit()
     conn.close()
 
-def get_employees():
+_TZ_VN = datetime.timezone(datetime.timedelta(hours=7))
+ONLINE_WINDOW_SECONDS = 300  # Dưới 5 phút kể từ lần hoạt động cuối = "đang trực tuyến"
+
+
+def _now_vn_iso() -> str:
+    return datetime.datetime.now(_TZ_VN).isoformat(timespec="seconds")
+
+
+def touch_employee_last_seen(emp_id: int, iso_now: str = None):
+    """Cập nhật last_seen_at (ISO 8601, múi giờ +07:00) cho nhân viên."""
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE employees SET last_seen_at=? WHERE id=?",
+            (iso_now or _now_vn_iso(), emp_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def is_employee_online(last_seen_at_str: str, window_seconds: int = ONLINE_WINDOW_SECONDS) -> bool:
+    """True nếu last_seen_at cách hiện tại dưới window_seconds giây."""
+    if not last_seen_at_str:
+        return False
+    try:
+        dt = datetime.datetime.fromisoformat(str(last_seen_at_str))
+    except ValueError:
+        return False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_TZ_VN)
+    delta = (datetime.datetime.now(_TZ_VN) - dt).total_seconds()
+    return 0 <= delta < window_seconds or (-5 < delta < 0)
+
+
+def _decorate_employee(d: dict) -> dict:
+    d.pop("password", None)
+    d["is_active"] = int(d.get("is_active", 1) if d.get("is_active") is not None else 1)
+    d["is_online"] = bool(d["is_active"]) and is_employee_online(d.get("last_seen_at"))
+    return d
+
+
+_EMP_COLS = "id, username, name, role, created_at, shift, is_active, last_seen_at"
+
+
+def get_employees(viewer_id: int = None, viewer_role: str = None):
+    """Danh sách nhân viên (KHÔNG có password).
+
+    Nếu truyền viewer_id: chỉ trả các dòng (role != 'Quản lý' OR id = viewer_id).
+    """
     conn = _connect()
     conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, username, name, role, created_at, shift FROM employees ORDER BY created_at DESC")
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        cursor = conn.cursor()
+        if viewer_id is not None:
+            cursor.execute(
+                f"SELECT {_EMP_COLS} FROM employees WHERE (role != 'Quản lý' OR id = ?) ORDER BY created_at DESC",
+                (viewer_id,),
+            )
+        else:
+            cursor.execute(f"SELECT {_EMP_COLS} FROM employees ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+    return [_decorate_employee(dict(r)) for r in rows]
+
 
 def get_employee(emp_id: int):
     conn = _connect()
     conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, username, name, role, created_at, shift FROM employees WHERE id=?", (emp_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT {_EMP_COLS} FROM employees WHERE id=?", (emp_id,))
+        row = cursor.fetchone()
+    finally:
+        conn.close()
+    return _decorate_employee(dict(row)) if row else None
+
 
 def add_employee(username: str, password: str, name: str, role: str, shift: str = None):
     conn = _connect()
@@ -430,26 +723,48 @@ def add_employee(username: str, password: str, name: str, role: str, shift: str 
     return emp_id
 
 
-def update_employee(emp_id: int, username: str, password: str, name: str, role: str, shift: str = None):
+def update_employee(emp_id: int, username: str, password: str, name: str, role: str,
+                    shift: str = None, is_active: int = None):
     conn = _connect()
     cursor = conn.cursor()
-    if password and str(password).strip():
-        hashed_pw = hash_password(password)
-        cursor.execute(
-            "UPDATE employees SET username=?, password=?, name=?, role=?, shift=? WHERE id=?",
-            (username.strip(), hashed_pw, name, role, shift, emp_id),
-        )
-    else:
-        cursor.execute(
-            "UPDATE employees SET username=?, name=?, role=?, shift=? WHERE id=?",
-            (username.strip(), name, role, shift, emp_id),
-        )
-    conn.commit()
-    conn.close()
+    try:
+        if password and str(password).strip():
+            hashed_pw = hash_password(password)
+            cursor.execute(
+                "UPDATE employees SET username=?, password=?, name=?, role=?, shift=? WHERE id=?",
+                (username.strip(), hashed_pw, name, role, shift, emp_id),
+            )
+        else:
+            cursor.execute(
+                "UPDATE employees SET username=?, name=?, role=?, shift=? WHERE id=?",
+                (username.strip(), name, role, shift, emp_id),
+            )
+        if is_active is not None:
+            cursor.execute(
+                "UPDATE employees SET is_active=? WHERE id=?",
+                (1 if int(is_active) else 0, emp_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_employee_active(emp_id: int, is_active: int):
+    """Kích hoạt lại / ngưng hoạt động một tài khoản."""
+    conn = _connect()
+    try:
+        conn.execute("UPDATE employees SET is_active=? WHERE id=?", (1 if int(is_active) else 0, emp_id))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def authenticate_employee(username: str, password: str):
-    """Xác thực nhân viên bằng PBKDF2-HMAC-SHA256 (`verify_password`)."""
+    """Xác thực nhân viên bằng PBKDF2-HMAC-SHA256 (`verify_password`).
+
+    Trả None nếu sai thông tin HOẶC tài khoản đã ngưng hoạt động (is_active = 0).
+    Đăng nhập thành công sẽ cập nhật last_seen_at.
+    """
     if not username or password is None:
         return None
     conn = _connect()
@@ -457,7 +772,7 @@ def authenticate_employee(username: str, password: str):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, password, name, role, shift FROM employees WHERE LOWER(username)=LOWER(?)",
+            "SELECT id, username, password, name, role, shift, is_active FROM employees WHERE LOWER(username)=LOWER(?)",
             (username.strip(),),
         )
         row = cursor.fetchone()
@@ -465,6 +780,10 @@ def authenticate_employee(username: str, password: str):
             return None
         if not verify_password(password, row["password"]):
             return None
+        if row["is_active"] == 0:
+            return None
+        conn.execute("UPDATE employees SET last_seen_at=? WHERE id=?", (_now_vn_iso(), row["id"]))
+        conn.commit()
         shift_code = row["shift"]
         return {
             "id": row["id"],
@@ -476,12 +795,41 @@ def authenticate_employee(username: str, password: str):
     finally:
         conn.close()
 
-def delete_employee(emp_id: int):
+
+def is_inactive_account_with_valid_password(username: str, password: str) -> bool:
+    """True nếu đúng mật khẩu nhưng tài khoản đã ngưng hoạt động (để API báo lỗi rõ ràng)."""
+    if not username or password is None:
+        return False
     conn = _connect()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM employees WHERE id=?", (emp_id,))
-    conn.commit()
-    conn.close()
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT password, is_active FROM employees WHERE LOWER(username)=LOWER(?)",
+            (username.strip(),),
+        ).fetchone()
+        return bool(row) and row["is_active"] == 0 and verify_password(password, row["password"])
+    finally:
+        conn.close()
+
+
+def delete_employee(emp_id: int) -> dict:
+    """Xóa nhân viên. Nếu đã có biên bản sự cố liên quan -> chỉ ngưng hoạt động (giữ toàn vẹn dữ liệu)."""
+    conn = _connect()
+    try:
+        cursor = conn.cursor()
+        used = cursor.execute(
+            "SELECT 1 FROM incidents WHERE reporter_id = ? OR resolved_by_id = ? LIMIT 1",
+            (emp_id, emp_id),
+        ).fetchone()
+        if used:
+            cursor.execute("UPDATE employees SET is_active = 0 WHERE id = ?", (emp_id,))
+            conn.commit()
+            return {"action": "deactivated", "id": emp_id}
+        cursor.execute("DELETE FROM employees WHERE id=?", (emp_id,))
+        conn.commit()
+        return {"action": "deleted", "id": emp_id}
+    finally:
+        conn.close()
 
 
 def _format_incident_row(row_dict: dict) -> dict:
@@ -510,6 +858,7 @@ def create_incident(
     created_at=None,
     status="open",
     reporter_shift=None,
+    image_path=None,
 ):
     """Lưu sự cố theo chuẩn 3NF + Snapshot Ca trực (Điểm 5):
     - Chỉ lưu khóa ngoại room_id và reporter_id (không lưu thừa tên/chức vụ).
@@ -544,8 +893,8 @@ def create_incident(
         cursor.execute(
             """
             INSERT INTO incidents 
-            (category, severity, title, description, room_id, show_id, seat_ids, reporter_id, reporter_shift, created_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (category, severity, title, description, room_id, show_id, seat_ids, reporter_id, reporter_shift, created_at, status, image_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 category,
@@ -559,6 +908,7 @@ def create_incident(
                 snapshot_shift,
                 now_iso,
                 clean_status,
+                image_path,
             ),
         )
         incident_id = cursor.lastrowid
@@ -586,7 +936,8 @@ INCIDENT_JOIN_SELECT = """
         i.status,
         i.resolved_by_id,
         e_res.name AS resolved_by_name,
-        i.resolved_at
+        i.resolved_at,
+        i.image_path
     FROM incidents i
     LEFT JOIN employees e_rep ON i.reporter_id = e_rep.id
     LEFT JOIN employees e_res ON i.resolved_by_id = e_res.id
@@ -594,6 +945,10 @@ INCIDENT_JOIN_SELECT = """
 
 
 def list_incidents(room_id=None, status=None, category=None, from_time=None, to_time=None, limit=None):
+    try:
+        cleanup_resolved_incidents(hours=1.0)
+    except Exception:
+        pass
     conn = _connect()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -668,6 +1023,118 @@ def resolve_incident(incident_id: int, resolver_id: int, resolver_name: str = No
     finally:
         conn.close()
 
+def cleanup_resolved_incidents(hours: float = 1.0) -> int:
+    """Tự động loại bỏ các sự cố đã xử lý (status='resolved') quá 1 tiếng (3600s) kể từ lúc giải quyết."""
+    conn = _connect()
+    try:
+        cursor = conn.cursor()
+        now = datetime.datetime.now().astimezone()
+        cutoff = now - datetime.timedelta(hours=hours)
+
+        cursor.execute("SELECT id, resolved_at, image_path FROM incidents WHERE status='resolved'")
+        rows = cursor.fetchall()
+
+        to_delete = []
+        photos_to_remove = []
+
+        for row in rows:
+            inc_id = row[0]
+            res_at_str = row[1]
+            img_path = row[2]
+
+            should_delete = False
+            if res_at_str:
+                try:
+                    dt = datetime.datetime.fromisoformat(str(res_at_str).strip())
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=now.tzinfo)
+                    if dt <= cutoff:
+                        should_delete = True
+                except Exception:
+                    should_delete = True
+            else:
+                should_delete = True
+
+            if should_delete:
+                to_delete.append(inc_id)
+                if img_path:
+                    photos_to_remove.append(img_path)
+
+        if to_delete:
+            cursor.execute(
+                f"DELETE FROM incidents WHERE id IN ({','.join(['?'] * len(to_delete))})",
+                to_delete,
+            )
+            conn.commit()
+
+            upload_dir = os.path.join(os.path.dirname(__file__), "uploads", "incidents")
+            for p in photos_to_remove:
+                try:
+                    fn = os.path.basename(p)
+                    full_p = os.path.join(upload_dir, fn)
+                    if os.path.exists(full_p):
+                        os.remove(full_p)
+                except Exception:
+                    pass
+
+        return len(to_delete)
+    finally:
+        conn.close()
+
+
+def delete_incident(incident_id: int) -> bool:
+    """Xóa một sự cố ngay lập tức theo yêu cầu người dùng."""
+    conn = _connect()
+    try:
+        cursor = conn.cursor()
+        row = cursor.execute("SELECT image_path FROM incidents WHERE id=?", (incident_id,)).fetchone()
+        if not row:
+            return False
+        img_path = row[0]
+        cursor.execute("DELETE FROM incidents WHERE id=?", (incident_id,))
+        conn.commit()
+
+        if img_path:
+            try:
+                upload_dir = os.path.join(os.path.dirname(__file__), "uploads", "incidents")
+                fn = os.path.basename(img_path)
+                full_p = os.path.join(upload_dir, fn)
+                if os.path.exists(full_p):
+                    os.remove(full_p)
+            except Exception:
+                pass
+        return True
+    finally:
+        conn.close()
+
+
+def clear_resolved_incidents() -> int:
+    """Xóa tất cả các sự cố đã khắc phục theo yêu cầu người dùng."""
+    conn = _connect()
+    try:
+        cursor = conn.cursor()
+        rows = cursor.execute("SELECT id, image_path FROM incidents WHERE status='resolved'").fetchall()
+        if not rows:
+            return 0
+        ids = [r[0] for r in rows]
+        photos = [r[1] for r in rows if r[1]]
+        cursor.execute(f"DELETE FROM incidents WHERE id IN ({','.join(['?'] * len(ids))})", ids)
+        conn.commit()
+
+        upload_dir = os.path.join(os.path.dirname(__file__), "uploads", "incidents")
+        for p in photos:
+            try:
+                fn = os.path.basename(p)
+                full_p = os.path.join(upload_dir, fn)
+                if os.path.exists(full_p):
+                    os.remove(full_p)
+            except Exception:
+                pass
+        return len(ids)
+    finally:
+        conn.close()
+
+
 
 def save_inference_log(
     room_id: str,
@@ -684,6 +1151,7 @@ def save_inference_log(
     inference_time_ms: float,
     yolo_time_ms: float = None,
     mapping_time_ms: float = None,
+    trigger_source: str = "MANUAL",
 ) -> int:
     """Lưu nhật ký phân tích AI (Audit & Performance Log) cho mỗi lần gọi /api/v1/analyze."""
     conn = _connect()
@@ -691,14 +1159,15 @@ def save_inference_log(
         cursor = conn.cursor()
         clean_room = _require_showtime_exists(cursor, room_id, show_id)
         captured_at = datetime.datetime.now().astimezone().isoformat()
+        clean_source = str(trigger_source or "MANUAL").strip().upper()
         cursor.execute(
             """
             INSERT INTO ai_inference_logs (
                 room_id, show_id, captured_at, image_width, image_height,
                 total_seats, booked_tickets_count, detected_heads_count, mapped_seats_count,
                 illegal_count, missing_count, over_capacity, inference_time_ms,
-                yolo_time_ms, mapping_time_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                yolo_time_ms, mapping_time_ms, trigger_source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 clean_room,
@@ -716,6 +1185,7 @@ def save_inference_log(
                 round(float(inference_time_ms), 2),
                 round(float(yolo_time_ms), 2) if yolo_time_ms is not None else None,
                 round(float(mapping_time_ms), 2) if mapping_time_ms is not None else None,
+                clean_source,
             ),
         )
         log_id = cursor.lastrowid
@@ -744,5 +1214,14 @@ def get_inference_logs(room_id: str = None, show_id: str = None, limit: int = 50
             query += f" LIMIT {int(limit)}"
         cursor.execute(query, tuple(params))
         return [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+def update_incident_photo(incident_id: int, image_path: str):
+    conn = _connect()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE incidents SET image_path = ? WHERE id = ?", (image_path, incident_id))
+        conn.commit()
     finally:
         conn.close()

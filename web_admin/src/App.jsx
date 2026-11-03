@@ -104,7 +104,7 @@ function App() {
             <img
               src={logoImg}
               alt="CineSight Logo"
-              style={{ width: 42, height: 42, borderRadius: 10, objectFit: 'cover' }}
+              style={{ width: 46, height: 46, borderRadius: 12, objectFit: 'cover', boxShadow: '0 4px 14px rgba(47, 114, 244, 0.25)' }}
             />
             <div>
               <div style={{ fontSize: 20, fontWeight: 800, color: '#0F172A' }}>
@@ -138,7 +138,7 @@ function App() {
               <input
                 type="text"
                 className="soc-input"
-                placeholder="Nhập username (VD: admin, duy)..."
+                placeholder="Nhập tài khoản Quản lý..."
                 value={loginUsername}
                 onChange={(e) => setLoginUsername(e.target.value)}
                 style={{ width: '100%', boxSizing: 'border-box' }}
@@ -189,7 +189,7 @@ function App() {
                 borderRadius: 10,
                 objectFit: 'cover',
                 flexShrink: 0,
-                boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+                boxShadow: '0 4px 12px rgba(47, 114, 244, 0.25)'
               }}
             />
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>

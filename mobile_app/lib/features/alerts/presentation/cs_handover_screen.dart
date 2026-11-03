@@ -81,12 +81,66 @@ class _CSHandoverScreenState extends State<CSHandoverScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              'ĐÃ KHẮC PHỤC TRONG CA (${resolved.length})',
-              style: const TextStyle(
-                color: CSAppColors.success,
-                fontWeight: FontWeight.w700,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ĐÃ KHẮC PHỤC TRONG CA (${resolved.length})',
+                        style: const TextStyle(
+                          color: CSAppColors.success,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Tự động làm sạch sau 1 tiếng kể từ lúc giải quyết',
+                        style: TextStyle(color: CSAppColors.muted, fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+                if (resolved.isNotEmpty)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: CSAppColors.danger,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                    onPressed: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: CSAppColors.surfaceStrong,
+                          title: const Text('Dọn sạch sự cố đã xử lý?', style: TextStyle(fontSize: 15)),
+                          content: const Text(
+                            'Toàn bộ các sự cố đã khắc phục sẽ được xóa ngay lập tức khỏi hệ thống.',
+                            style: TextStyle(fontSize: 13, color: CSAppColors.muted),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Hủy'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: CSAppColors.danger),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Xóa tất cả', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        await ApiClient.clearResolvedIncidents();
+                        _loadIncidents();
+                      }
+                    },
+                    icon: const Icon(Icons.delete_sweep_outlined, size: 16),
+                    label: const Text('Dọn sạch', style: TextStyle(fontSize: 11)),
+                  ),
+              ],
             ),
             const SizedBox(height: 10),
             ...resolved.map(
@@ -127,6 +181,14 @@ class CSIncidentCard extends StatelessWidget {
       try {
         final dt = DateTime.parse(dateStr).toLocal();
         dateStr = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} - ${dt.day}/${dt.month}/${dt.year}';
+      } catch (_) {}
+    }
+
+    String resolvedStr = incident['resolved_at'] ?? '';
+    if (resolvedStr.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(resolvedStr).toLocal();
+        resolvedStr = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} - ${dt.day}/${dt.month}/${dt.year}';
       } catch (_) {}
     }
 
@@ -172,11 +234,105 @@ class CSIncidentCard extends StatelessWidget {
                 fontSize: 11,
               ),
             ),
-          if (!isResolved) ...[
+          if (incident['description'] != null && incident['description'].toString().trim().isNotEmpty) ...[
             const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
+            Text(
+              incident['description'].toString(),
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
+            ),
+          ],
+          if (incident['image_path'] != null && incident['image_path'].toString().trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Builder(
+              builder: (ctx) {
+                final rawPath = incident['image_path'].toString().trim();
+                final imgUrl = rawPath.startsWith('http')
+                    ? rawPath
+                    : '${ApiClient.baseUrl.replaceAll(RegExp(r'/+$'), '')}$rawPath';
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    onTap: () {
+                      showDialog(
+                        context: ctx,
+                        builder: (_) => Dialog(
+                          backgroundColor: Colors.transparent,
+                          insetPadding: const EdgeInsets.all(12),
+                          child: Stack(
+                            alignment: Alignment.topRight,
+                            children: [
+                              InteractiveViewer(
+                                child: Image.network(
+                                  imgUrl,
+                                  headers: const {'ngrok-skip-browser-warning': 'true'},
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                                onPressed: () => Navigator.pop(ctx),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                    child: Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        Image.network(
+                          imgUrl,
+                          height: 140,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          headers: const {'ngrok-skip-browser-warning': 'true'},
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            height: 80,
+                            color: CSAppColors.surfaceStrong,
+                            alignment: Alignment.center,
+                            child: const Text('Không tải được ảnh hiện trường', style: TextStyle(color: CSAppColors.muted, fontSize: 11)),
+                          ),
+                        ),
+                        Container(
+                          margin: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.75),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.zoom_in, size: 14, color: Colors.white),
+                              SizedBox(width: 4),
+                              Text('Xem ảnh', style: TextStyle(color: Colors.white, fontSize: 10)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+          if (isResolved && resolvedStr.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Khắc phục lúc: $resolvedStr (Tự xóa sau 1h)',
+                style: const TextStyle(
+                  color: CSAppColors.success,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (!isResolved) ...[
                 TextButton(
                   onPressed: () async {
                     final res = await ApiClient.resolveIncident(incident['id']);
@@ -192,9 +348,57 @@ class CSIncidentCard extends StatelessWidget {
                   },
                   child: const Text('Đánh dấu đã xử lý'),
                 ),
+                const SizedBox(width: 8),
               ],
-            ),
-          ]
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: isResolved ? CSAppColors.danger : CSAppColors.muted,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: CSAppColors.surfaceStrong,
+                      title: const Text('Xóa sự cố này?', style: TextStyle(fontSize: 15)),
+                      content: Text(
+                        'Bạn có chắc chắn muốn xóa sự cố "${incident['title'] ?? 'N/A'}" ngay lập tức?',
+                        style: const TextStyle(fontSize: 13, color: CSAppColors.muted),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Hủy'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: CSAppColors.danger),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Xóa ngay', style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    final res = await ApiClient.deleteIncident(incident['id']);
+                    if (res['success'] == true) {
+                      onResolved();
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(res['error'] ?? 'Không thể xóa sự cố')),
+                        );
+                      }
+                    }
+                  }
+                },
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: Text(
+                  isResolved ? 'Xóa sự cố ngay' : 'Xóa',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          )
         ],
       ),
     );

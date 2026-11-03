@@ -365,12 +365,20 @@ export default function Showtimes({ onNavigateToTickets }) {
         border: '1px solid #E2E8F0',
         flexShrink: 0
       }}>
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-blue)', letterSpacing: '0.5px' }}>
-            ĐIỀU ĐỘ LỊCH CHIẾU PHIM (CINESIGHT TMS)
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.3px' }}>
+            LỊCH CHIẾU PHÒNG CHIẾU
           </div>
-          <span style={{ fontSize: 12, color: '#64748B', background: '#F1F5F9', padding: '3px 8px', borderRadius: 6 }}>
-            Light Mode • Trực quan 4 Phòng chiếu
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'var(--brand-blue)',
+            background: 'var(--brand-blue-light)',
+            border: '1px solid #BFDBFE',
+            padding: '2px 8px',
+            borderRadius: 4
+          }}>
+            4 PHÒNG CHIẾU
           </span>
         </div>
 
@@ -433,42 +441,47 @@ export default function Showtimes({ onNavigateToTickets }) {
         flexShrink: 0
       }}>
         {/* Nút chuyển đổi View Mode */}
-        <div style={{ display: 'flex', gap: 6 }}>
+                {/* Nút chuyển đổi View Mode dạng Segmented Control liền khối */}
+        <div style={{
+          display: 'inline-flex',
+          background: '#F1F5F9',
+          padding: 3,
+          borderRadius: 6,
+          border: '1px solid #E2E8F0'
+        }}>
           <button
             onClick={() => setViewMode('timeline')}
             style={{
-              background: viewMode === 'timeline' ? 'var(--brand-blue)' : '#F1F5F9',
-              color: viewMode === 'timeline' ? '#FFFFFF' : '#475569',
-              border: '1px solid ' + (viewMode === 'timeline' ? 'var(--brand-blue)' : '#CBD5E1'),
-              padding: '6px 14px',
-              borderRadius: 6,
+              background: viewMode === 'timeline' ? '#FFFFFF' : 'transparent',
+              color: viewMode === 'timeline' ? '#0F172A' : '#64748B',
+              border: viewMode === 'timeline' ? '1px solid #CBD5E1' : '1px solid transparent',
+              padding: '5px 14px',
+              borderRadius: 4,
               cursor: 'pointer',
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6
+              boxShadow: viewMode === 'timeline' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              transition: 'all 0.15s ease'
             }}
           >
-            Bảng dòng thời gian (Timeline)
+            Dòng thời gian (Timeline)
           </button>
           <button
             onClick={() => setViewMode('catalog')}
             style={{
-              background: viewMode === 'catalog' ? 'var(--brand-blue)' : '#F1F5F9',
-              color: viewMode === 'catalog' ? '#FFFFFF' : '#475569',
-              border: '1px solid ' + (viewMode === 'catalog' ? 'var(--brand-blue)' : '#CBD5E1'),
-              padding: '6px 14px',
-              borderRadius: 6,
+              background: viewMode === 'catalog' ? '#FFFFFF' : 'transparent',
+              color: viewMode === 'catalog' ? '#0F172A' : '#64748B',
+              border: viewMode === 'catalog' ? '1px solid #CBD5E1' : '1px solid transparent',
+              padding: '5px 14px',
+              borderRadius: 4,
               cursor: 'pointer',
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6
+              boxShadow: viewMode === 'catalog' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              transition: 'all 0.15s ease'
             }}
           >
-            Kho phim ({movies.length} phim)
+            Kho phim ({movies.length})
           </button>
         </div>
 
@@ -584,22 +597,22 @@ export default function Showtimes({ onNavigateToTickets }) {
             flexShrink: 0
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
-                LỊCH CHIẾU {isToday ? 'HÔM NAY' : 'NGÀY'}: <span style={{ color: 'var(--brand-blue)' }}>{selectedDate}</span> (4 PHÒNG CHIẾU TƯƠNG TÁC)
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
+                LỊCH CHIẾU: <span style={{ color: 'var(--brand-blue)' }}>{selectedDate}</span>
               </div>
-              {/* Chú thích màu sắc (UX Legend) */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10, color: '#64748B' }}>
+              {/* Chú thích màu sắc 3 trạng thái gọn gàng */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#475569' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: '#DC2626', display: 'inline-block' }}></span>
-                  <strong style={{ color: '#0F172A' }}>Đang chiếu</strong> (đậm nét)
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#DC2626' }} />
+                  <strong style={{ color: '#0F172A' }}>Đang chiếu</strong>
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--brand-blue)', display: 'inline-block' }}></span>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-blue)' }} />
                   <span>Sắp chiếu</span>
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: '#94A3B8', opacity: 0.55, display: 'inline-block' }}></span>
-                  <span>Đã chiếu</span> (màu nhạt)
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#94A3B8' }} />
+                  <span>Đã chiếu</span>
                 </span>
               </div>
             </div>

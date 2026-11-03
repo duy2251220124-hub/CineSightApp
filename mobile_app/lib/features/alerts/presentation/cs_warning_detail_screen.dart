@@ -112,6 +112,12 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                         const SizedBox(height: 12),
                         _buildRow('Vị trí ghế vi phạm:', '$seat', isBold: true, highlightColor: color),
                         const Divider(height: 18),
+                        _buildRow('Số vé đã quét:', '${alert['scanned_tickets_count'] ?? 'N/A'} vé'),
+                        const Divider(height: 18),
+                        _buildRow('Số người hiện có trong rạp:', '${alert['detected_people_count'] ?? 'N/A'} người'),
+                        const Divider(height: 18),
+                        _buildRow('Ghế cảnh báo cùng đợt:', '${(alert['all_alerted_seats'] as List?)?.join(', ') ?? seat}'),
+                        const Divider(height: 18),
                         _buildRow('Phòng chiếu:', room),
                         const Divider(height: 18),
                         _buildRow('Suất chiếu:', show),
@@ -171,7 +177,15 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                         final messenger = ScaffoldMessenger.of(context);
                         final navigator = Navigator.of(context);
                         setState(() => _isResolving = true);
-                        final success = await ApiClient.resolveAlert(widget.alertId);
+                        final roomId = alert['room_id']?.toString();
+                        final showId = alert['show_id']?.toString();
+                        bool success = false;
+                        if (roomId != null && showId != null && roomId.isNotEmpty && showId.isNotEmpty) {
+                          success = await ApiClient.resolveRoomAlerts(roomId, showId);
+                        }
+                        if (!success) {
+                          success = await ApiClient.resolveAlert(widget.alertId);
+                        }
                         if (!mounted) return;
                         setState(() => _isResolving = false);
                         if (success) {

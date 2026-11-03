@@ -23,84 +23,90 @@ class CSBottomNav extends StatelessWidget {
     ];
 
     return Container(
-      height: 80,
       decoration: const BoxDecoration(
         color: CSAppColors.surface,
         border: Border(
           top: BorderSide(color: CSAppColors.border),
         ),
       ),
-      child: Row(
-        children: List.generate(items.length, (index) {
-          final selected = selectedIndex == index;
-          final item = items[index];
-          final isAlertTab = index == 2;
+      child: SafeArea(
+        top: false,
+        bottom: true,
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            children: List.generate(items.length, (index) {
+              final selected = selectedIndex == index;
+              final item = items[index];
+              final isAlertTab = index == 2;
 
-          return Expanded(
-            child: InkWell(
-              onTap: () => onChanged?.call(index),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
+              return Expanded(
+                child: InkWell(
+                  onTap: () => onChanged?.call(index),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        isAlertTab && alertCount > 0
-                            ? Icons.notifications_active
-                            : item.$1,
-                        color: isAlertTab && alertCount > 0
-                            ? CSAppColors.danger
-                            : (selected ? CSAppColors.primary : CSAppColors.muted),
-                        size: 24,
-                      ),
-                      if (isAlertTab && alertCount > 0)
-                        Positioned(
-                          right: -8,
-                          top: -4,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: CSAppColors.danger,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black45,
-                                  blurRadius: 4,
-                                  offset: Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                            child: Text(
-                              alertCount > 99 ? '99+' : '$alertCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(
+                            isAlertTab && alertCount > 0
+                                ? Icons.notifications_active
+                                : item.$1,
+                            color: isAlertTab && alertCount > 0
+                                ? CSAppColors.danger
+                                : (selected ? CSAppColors.primary : CSAppColors.muted),
+                            size: 24,
                           ),
+                          if (isAlertTab && alertCount > 0)
+                            Positioned(
+                              right: -8,
+                              top: -4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: CSAppColors.danger,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black45,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                child: Text(
+                                  alertCount > 99 ? '99+' : '$alertCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.$2,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                          color: isAlertTab && alertCount > 0
+                              ? CSAppColors.danger
+                              : (selected ? CSAppColors.primary : CSAppColors.muted),
                         ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    item.$2,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                      color: isAlertTab && alertCount > 0
-                          ? CSAppColors.danger
-                          : (selected ? CSAppColors.primary : CSAppColors.muted),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
+                ),
+              );
+            }),
+          ),
+        ),
       ),
     );
   }

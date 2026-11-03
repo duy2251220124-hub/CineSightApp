@@ -13,7 +13,11 @@ ngrok_bin/
 *.avi
 *.mov
 *.mkv
-data_raw/
+data_raw/*
+!data_raw/*.json
+!ai_service/data_raw/*.json
+.impeccable/
+web_admin/.impeccable/
 datasets/
 models/
 runs/
@@ -32,3 +36,6 @@ scratch/
 # Video testing & sample extractions
 ai_service/test_videos/
 ai_service/video_samples_room3/
+
+# Tài liệu chứa mật khẩu tài khoản mẫu (không đẩy lên Git)
+docs/TAI_KHOAN_HE_THONG.md

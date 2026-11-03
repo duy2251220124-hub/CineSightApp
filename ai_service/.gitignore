@@ -4,7 +4,8 @@ env/
 __pycache__/
 
 # Dữ liệu ảnh và mô hình AI (Không đẩy lên Github)
-data_raw/
+data_raw/*
+!data_raw/*.json
 datasets/
 datasets_archive/
 runs/

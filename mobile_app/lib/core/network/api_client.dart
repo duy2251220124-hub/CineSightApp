@@ -6,10 +6,13 @@ import 'dart:convert';
 import '../database/hive_service.dart';
 
 class ApiClient {
-  // BƯỚC QUAN TRỌNG:
-  // Copy link Forwarding (HTTPS) từ màn hình chạy Ngrok và dán vào đây
-  // Ví dụ: 'https://xxxx-xxxx.ngrok-free.app'
-  static const String baseUrl = 'https://quill-device-deny.ngrok-free.dev';
+  static String get baseUrl => HiveService.getServerUrl();
+
+  /// Cập nhật địa chỉ máy chủ động mà không cần build lại APK
+  static void updateBaseUrl(String newUrl) {
+    HiveService.setServerUrl(newUrl);
+    _dio.options.baseUrl = HiveService.getServerUrl();
+  }
 
   static Map<String, dynamic>? currentUser;
   static String? authToken;
@@ -63,14 +66,23 @@ class ApiClient {
 
   static final Dio _dio = Dio(
     BaseOptions(
-      baseUrl: baseUrl.trim(),
+      baseUrl: HiveService.getServerUrl(),
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {
         'ngrok-skip-browser-warning': 'true', // Bypass ngrok free warning
       },
     ),
-  );
+  )..interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (authToken != null && authToken!.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $authToken';
+          }
+          handler.next(options);
+        },
+      ),
+    );
 
   /// Hàm đóng gói danh sách vé quét được bắn lên AI Server
   static Future<bool> syncTicketsToServer(String roomId, String showId) async {
@@ -232,6 +244,36 @@ class ApiClient {
     }
   }
 
+  /// Xử lý hàng loạt toàn bộ cảnh báo của 1 phòng chiếu (One-Tap Batch Resolve)
+  static Future<bool> resolveRoomAlerts(String roomId, String showId) async {
+    try {
+      final response = await _dio.post('/api/v1/resolve_room_alerts', data: {
+        'room_id': roomId,
+        'show_id': showId,
+      });
+      return response.statusCode == 200 && response.data['status'] == 'success';
+    } catch (e) {
+      debugPrint('[NETWORK] Lỗi resolveRoomAlerts: $e');
+      return false;
+    }
+  }
+
+  static Future<List<dynamic>> fetchGroupedAlerts({String? roomId}) async {
+    try {
+      final response = await _dio.get(
+        '/api/v1/alerts',
+        queryParameters: roomId != null ? {'room_id': roomId} : null,
+      );
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        return response.data['grouped_alerts'] ?? [];
+      }
+      return [];
+    } catch (e) {
+      debugPrint('[NETWORK] Lỗi fetchGroupedAlerts: $e');
+      return [];
+    }
+  }
+
   static Future<List<dynamic>> fetchTickets(String roomId, String showId) async {
     try {
       final response = await _dio.get('/api/v1/tickets', queryParameters: {'room_id': roomId, 'show_id': showId});
@@ -279,6 +321,20 @@ class ApiClient {
     } catch (e) {
       debugPrint('[NETWORK] Lỗi createIncident: $e');
       return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<bool> uploadIncidentPhoto(int incidentId, String filePath) async {
+    try {
+      final fileName = filePath.split(RegExp(r'[\/]')).last;
+      final formData = FormData.fromMap({
+        'image': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+      final response = await _dio.post('/api/v1/incidents/$incidentId/photo', data: formData);
+      return response.statusCode == 200 && response.data['status'] == 'success';
+    } catch (e) {
+      debugPrint('[NETWORK] Lỗi uploadIncidentPhoto: $e');
+      return false;
     }
   }
 
@@ -350,6 +406,29 @@ class ApiClient {
     } catch (e) {
       debugPrint('[NETWORK] Lỗi getIncidentCategories: $e');
       return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteIncident(int incidentId) async {
+    try {
+      final response = await _dio.delete('/api/v1/incidents/$incidentId');
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        return {'success': true, 'data': response.data};
+      }
+      return {'success': false, 'error': response.data['error'] ?? 'Lỗi không xác định'};
+    } catch (e) {
+      debugPrint('[NETWORK] Lỗi deleteIncident: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<bool> clearResolvedIncidents() async {
+    try {
+      final response = await _dio.delete('/api/v1/incidents/resolved/clear');
+      return response.statusCode == 200 && response.data['status'] == 'success';
+    } catch (e) {
+      debugPrint('[NETWORK] Lỗi clearResolvedIncidents: $e');
+      return false;
     }
   }
 }
