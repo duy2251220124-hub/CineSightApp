@@ -40,3 +40,7 @@ ai_service/video_samples_room3/
 
 # Tài liệu chứa mật khẩu tài khoản mẫu (không đẩy lên Git)
 docs/TAI_KHOAN_HE_THONG.md
+
+# Tai lieu ca nhan, luan van & Word (khong day len Git)
+*.docx
+docs/
