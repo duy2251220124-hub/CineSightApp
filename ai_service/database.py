@@ -5,11 +5,56 @@ from security import hash_password, verify_password
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "cinesight.db")
 
-# Phải khớp với SHIFTS trong main.py (code: ca_sang, ca_toi)
+_TZ_VN = datetime.timezone(datetime.timedelta(hours=7))
+
+# Phải khớp với SHIFTS trong main.py (code: ca_sang, ca_chieu, ca_toi, ca_dem)
 SHIFT_LABELS = {
     "ca_sang": "Ca sáng",
+    "ca_chieu": "Ca chiều",
     "ca_toi": "Ca tối",
+    "ca_dem": "Ca đêm",
 }
+
+
+def get_dynamic_shift(role: str = None, now: datetime.datetime = None) -> tuple[str, str]:
+    """Tính toán ca làm việc động dựa trên thời điểm đăng nhập/thao tác (Giờ Việt Nam UTC+7):
+    - Nhân viên (Soát vé / Staff):
+        + 07:30 - 13:00: Ca sáng (07:30 - 13:00) [ca_sang]
+        + 13:00 - 16:00: Ca chiều (13:00 - 16:00) [ca_chieu]
+        + 16:00 - 23:00: Ca tối (16:00 - 23:00) [ca_toi]
+        + 23:00 - 07:30: Ca đêm (23:00 - 07:30) [ca_dem]
+    - Quản lý (Manager / Admin):
+        + 07:30 - 16:00: Ca sáng (07:30 - 16:00) [ca_sang]
+        + 16:00 - 24:00: Ca tối (16:30 - 24:00) [ca_toi]
+        + 00:00 - 07:30: Ca đêm (00:00 - 07:30) [ca_dem]
+    """
+    if now is None:
+        now = datetime.datetime.now(_TZ_VN)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=_TZ_VN)
+    else:
+        now = now.astimezone(_TZ_VN)
+
+    minute_of_day = now.hour * 60 + now.minute
+    is_manager = str(role or "").strip().lower() in ("quản lý", "quan ly", "manager", "admin")
+
+    if is_manager:
+        if 450 <= minute_of_day < 960:
+            return "ca_sang", "Ca sáng (07:30 - 16:00)"
+        elif 960 <= minute_of_day < 1440:
+            return "ca_toi", "Ca tối (16:30 - 24:00)"
+        else:
+            return "ca_dem", "Ca đêm (00:00 - 07:30)"
+    else:
+        if 450 <= minute_of_day < 780:
+            return "ca_sang", "Ca sáng (07:30 - 13:00)"
+        elif 780 <= minute_of_day < 960:
+            return "ca_chieu", "Ca chiều (13:00 - 16:00)"
+        elif 960 <= minute_of_day < 1380:
+            return "ca_toi", "Ca tối (16:00 - 23:00)"
+        else:
+            return "ca_dem", "Ca đêm (23:00 - 07:30)"
+
 
 
 def _connect():
@@ -175,7 +220,7 @@ def init_db():
 
     # Làm sạch mã ca cũ không hợp lệ (ví dụ 'morning' -> NULL)
     cursor.execute(
-        "UPDATE employees SET shift = NULL WHERE shift IS NOT NULL AND shift NOT IN ('ca_sang', 'ca_toi')"
+        "UPDATE employees SET shift = NULL WHERE shift IS NOT NULL AND shift NOT IN ('ca_sang', 'ca_chieu', 'ca_toi', 'ca_dem')"
     )
 
     # Điểm 3: Không đặt mật khẩu chữ thường cứng trong mã nguồn.
@@ -667,6 +712,26 @@ def _decorate_employee(d: dict) -> dict:
     d.pop("password", None)
     d["is_active"] = int(d.get("is_active", 1) if d.get("is_active") is not None else 1)
     d["is_online"] = bool(d["is_active"]) and is_employee_online(d.get("last_seen_at"))
+
+    # Chỉ hiển thị ca làm việc khi nhân viên đã đăng nhập vào hệ thống
+    last_seen = d.get("last_seen_at")
+    logged_in = False
+    if last_seen:
+        try:
+            dt = datetime.datetime.fromisoformat(str(last_seen))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_TZ_VN)
+            # Chỉ tính là đã đăng nhập nếu có hoạt động trong ngày hôm nay
+            logged_in = dt.astimezone(_TZ_VN).date() == datetime.datetime.now(_TZ_VN).date()
+        except Exception:
+            logged_in = False
+
+    shift_code = d.get("shift")
+    if logged_in and shift_code and shift_code in SHIFT_LABELS:
+        d["shift_label"] = SHIFT_LABELS[shift_code]
+    else:
+        d["shift"] = None
+        d["shift_label"] = "Chưa có"
     return d
 
 
@@ -782,15 +847,19 @@ def authenticate_employee(username: str, password: str):
             return None
         if row["is_active"] == 0:
             return None
-        conn.execute("UPDATE employees SET last_seen_at=? WHERE id=?", (_now_vn_iso(), row["id"]))
+        # Tự động tính ca làm việc theo giờ đăng nhập thực tế
+        dyn_shift_code, dyn_shift_label = get_dynamic_shift(row["role"])
+        conn.execute(
+            "UPDATE employees SET last_seen_at=?, shift=? WHERE id=?",
+            (_now_vn_iso(), dyn_shift_code, row["id"])
+        )
         conn.commit()
-        shift_code = row["shift"]
         return {
             "id": row["id"],
             "name": row["name"],
             "role": row["role"],
-            "shift": shift_code,
-            "shift_label": SHIFT_LABELS.get(shift_code, "Chưa phân ca"),
+            "shift": dyn_shift_code,
+            "shift_label": dyn_shift_label,
         }
     finally:
         conn.close()
@@ -878,14 +947,19 @@ def create_incident(
             raise ValueError("Thiếu mã nhân viên báo cáo sự cố (reporter_id).")
 
         emp_row = cursor.execute(
-            "SELECT id, shift FROM employees WHERE id=?",
+            "SELECT id, shift, role FROM employees WHERE id=?",
             (int(reporter_id),),
         ).fetchone()
         if not emp_row:
             raise ValueError(f"Nhân viên báo cáo (id={reporter_id}) không tồn tại trong hệ thống.")
 
         clean_rep_id = int(emp_row[0])
-        snapshot_shift = reporter_shift if reporter_shift in SHIFT_LABELS else emp_row[1]
+        if reporter_shift and reporter_shift in SHIFT_LABELS:
+            snapshot_shift = reporter_shift
+        elif emp_row[1] and emp_row[1] in SHIFT_LABELS:
+            snapshot_shift = emp_row[1]
+        else:
+            snapshot_shift, _ = get_dynamic_shift(emp_row[2] if len(emp_row) > 2 else None)
 
         now_iso = created_at or datetime.datetime.now().astimezone().isoformat()
         clean_status = status if status in ("open", "resolved") else "open"

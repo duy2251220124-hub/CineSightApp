@@ -302,7 +302,12 @@ class _CSHomeScreenState extends State<CSHomeScreen> with SingleTickerProviderSt
 
     final userCode = (ApiClient.currentUser?['username'] ?? ApiClient.currentUser?['id']?.toString() ?? 'Us-221033').toString();
 
-    final shiftLabel = (ApiClient.currentUser?['shift_label'] ?? '10:00 - 18:00').toString();
+    final shiftLabel = (ApiClient.currentUser?['shift_label'] != null &&
+            ApiClient.currentUser!['shift_label'].toString().isNotEmpty &&
+            ApiClient.currentUser!['shift_label'].toString() != '10:00 - 18:00' &&
+            ApiClient.currentUser!['shift_label'].toString() != 'Chưa phân ca')
+        ? ApiClient.currentUser!['shift_label'].toString()
+        : ApiClient.getDynamicShiftLabel(userRole);
 
 
 

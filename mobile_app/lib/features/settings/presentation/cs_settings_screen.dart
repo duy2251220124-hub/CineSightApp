@@ -114,7 +114,7 @@ class _CSSettingsScreenState extends State<CSSettingsScreen> {
 
                   Text(
 
-                    '${ApiClient.currentUser?['role'] ?? 'Nhân viên'} · ${ApiClient.currentUser?['shift_label'] ?? 'Chưa phân ca'}',
+                    '${ApiClient.currentUser?['role'] ?? 'Nhân viên'} · ${(ApiClient.currentUser?['shift_label'] != null && ApiClient.currentUser!['shift_label'].toString().isNotEmpty && ApiClient.currentUser!['shift_label'].toString() != 'Chưa phân ca') ? ApiClient.currentUser!['shift_label'] : ApiClient.getDynamicShiftLabel(ApiClient.currentUser?['role'])}',
 
                     style: const TextStyle(
 

@@ -2,11 +2,13 @@
 """
 Script to generate the formal university thesis Chapter 2 in DOCX format:
 CHƯƠNG 2: PHÂN TÍCH YÊU CẦU - DỰ ÁN CINESIGHT
+Matches the user's exact Word template structure and updated system specifications.
 """
 
 import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from matplotlib.path import Path
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -18,129 +20,328 @@ DOCS_DIR = r"C:\CineSightApp\docs"
 DIAGRAM_PATH = os.path.join(DOCS_DIR, "use_case_diagram.png")
 OUTPUT_DOCX = os.path.join(DOCS_DIR, "CHUONG_2_PHAN_TICH_YEU_CAU.docx")
 
-def generate_usecase_diagram():
-    fig, ax = plt.subplots(figsize=(14, 11), dpi=300)
-    ax.set_xlim(0, 140)
-    ax.set_ylim(0, 115)
-    ax.axis('off')
 
-    # Background system boundary
+def generate_usecase_diagram():
+    """
+    Draws a publication-grade UML 2.5 System Use Case Diagram for CineSight
+    with a strictly planar (zero line-crossing) 3-column architecture.
+    """
+    fig, ax = plt.subplots(figsize=(16.5, 11.8), dpi=300)
+    fig.patch.set_facecolor("#FFFFFF")
+    ax.set_facecolor("#FFFFFF")
+    ax.set_xlim(0, 174)
+    ax.set_ylim(0, 128)
+    ax.axis("off")
+
+    # 1. Outer System Boundary Box with Header Bar
+    sys_shadow = patches.FancyBboxPatch(
+        (29.6, 6.4), 113.0, 116.0,
+        boxstyle="round,pad=1.2,rounding_size=2.0",
+        edgecolor="none",
+        facecolor="#E2E8F0",
+        zorder=1
+    )
+    ax.add_patch(sys_shadow)
+
     sys_rect = patches.FancyBboxPatch(
-        (34, 4), 74, 107,
-        boxstyle="round,pad=1.5",
+        (29.0, 7.0), 113.0, 116.0,
+        boxstyle="round,pad=1.2,rounding_size=2.0",
         edgecolor="#1E3A8A",
         facecolor="#F8FAFC",
-        linewidth=2.5,
-        linestyle='-'
+        linewidth=2.2,
+        zorder=2
     )
     ax.add_patch(sys_rect)
-    ax.text(71, 107.5, "HỆ THỐNG CINESIGHT", fontsize=15, fontweight="bold", ha="center", va="center", color="#1E3A8A")
 
-    # Helper function to draw stick figure actor
-    def draw_actor(x, y, label, color="#0F172A"):
-        # Head
-        ax.add_patch(patches.Circle((x, y + 5), 2.2, edgecolor=color, facecolor="#FFFFFF", lw=2.2))
+    # Top Header Banner inside System Boundary
+    header_rect = patches.FancyBboxPatch(
+        (29.0, 117.2), 113.0, 5.8,
+        boxstyle="round,pad=1.2,rounding_size=2.0",
+        edgecolor="#1E3A8A",
+        facecolor="#1E3A8A",
+        linewidth=1.5,
+        zorder=3
+    )
+    ax.add_patch(header_rect)
+    ax.text(
+        85.5, 120.1,
+        "«system»  HỆ THỐNG SOÁT VÉ VÀ ĐỐI SOÁT KHÁN GIẢ AI — CINESIGHT",
+        fontsize=12.5, fontweight="bold", ha="center", va="center",
+        color="#FFFFFF", zorder=4
+    )
+
+    # Subtle internal subsystem zone boxes
+    zone_ops = patches.FancyBboxPatch(
+        (31.5, 9.5), 35.0, 105.0,
+        boxstyle="round,pad=0.6,rounding_size=1.5",
+        edgecolor="#BFDBFE",
+        facecolor="#EFF6FF",
+        linewidth=1.1,
+        linestyle="--",
+        alpha=0.55,
+        zorder=2
+    )
+    ax.add_patch(zone_ops)
+    ax.text(
+        49.0, 112.8, "Phân hệ Nghiệp vụ & Quản trị",
+        fontsize=9.2, fontweight="bold", style="italic",
+        ha="center", va="center", color="#1D4ED8", zorder=3
+    )
+
+    zone_ai = patches.FancyBboxPatch(
+        (69.5, 36.0), 70.0, 78.5,
+        boxstyle="round,pad=0.6,rounding_size=1.5",
+        edgecolor="#FDE68A",
+        facecolor="#FFFBEB",
+        linewidth=1.1,
+        linestyle="--",
+        alpha=0.65,
+        zorder=2
+    )
+    ax.add_patch(zone_ai)
+    ax.text(
+        104.5, 112.8, "Phân hệ Thị giác máy tính & Đối soát tự động",
+        fontsize=9.2, fontweight="bold", style="italic",
+        ha="center", va="center", color="#B45309", zorder=3
+    )
+
+    # 2. Helper to draw UML Stick Figure Actor with Role Card
+    def draw_actor(x, y, title, subtitle, color="#0F172A", badge_bg="#F1F5F9"):
+        # Pedestal / Card behind label
+        card = patches.FancyBboxPatch(
+            (x - 11.5, y - 18.8), 23.0, 7.6,
+            boxstyle="round,pad=0.4,rounding_size=1.0",
+            edgecolor=color, facecolor=badge_bg, linewidth=1.3, zorder=4
+        )
+        ax.add_patch(card)
+
+        # Head (with subtle shadow)
+        ax.add_patch(patches.Circle((x + 0.3, y + 5.2), 2.3, edgecolor="none", facecolor="#CBD5E1", zorder=3))
+        ax.add_patch(patches.Circle((x, y + 5.5), 2.3, edgecolor=color, facecolor="#FFFFFF", lw=2.3, zorder=4))
         # Body
-        ax.plot([x, x], [y + 2.8, y - 4], color=color, lw=2.5)
+        ax.plot([x, x], [y + 3.2, y - 3.5], color=color, lw=2.5, solid_capstyle="round", zorder=4)
         # Arms
-        ax.plot([x - 4, x + 4], [y + 0.5, y + 0.5], color=color, lw=2.5)
+        ax.plot([x - 4.2, x + 4.2], [y + 1.0, y + 1.0], color=color, lw=2.5, solid_capstyle="round", zorder=4)
         # Legs
-        ax.plot([x, x - 3.5], [y - 4, y - 10], color=color, lw=2.5)
-        ax.plot([x, x + 3.5], [y - 4, y - 10], color=color, lw=2.5)
-        # Label
-        ax.text(x, y - 13.5, label, fontsize=10.5, fontweight="bold", ha="center", va="top", color=color)
+        ax.plot([x, x - 3.4], [y - 3.5, y - 9.2], color=color, lw=2.5, solid_capstyle="round", zorder=4)
+        ax.plot([x, x + 3.4], [y - 3.5, y - 9.2], color=color, lw=2.5, solid_capstyle="round", zorder=4)
 
-    # Helper to draw use case ellipse
-    def draw_usecase(x, y, text, w=22, h=5.8, bg="#EFF6FF", border="#2563EB", lw=1.5, ls='-'):
-        ellipse = patches.Ellipse((x, y), w, h, edgecolor=border, facecolor=bg, linewidth=lw, linestyle=ls)
+        # Label inside card
+        ax.text(x, y - 13.7, title, fontsize=10.0, fontweight="bold", ha="center", va="center", color=color, zorder=5)
+        ax.text(x, y - 16.8, subtitle, fontsize=8.5, ha="center", va="center", color="#334155", zorder=5)
+
+    # Draw 3 Actors
+    draw_actor(13.0, 91.0, "Nhân viên soát vé", "(User / Staff - Mobile App)", color="#047857", badge_bg="#ECFDF5")
+    draw_actor(13.0, 36.0, "Quản trị viên", "(Admin - Web Admin)", color="#1E3A8A", badge_bg="#EFF6FF")
+    draw_actor(159.5, 68.0, "Hệ thống AI / Camera", "(CCTV & AI Scheduler)", color="#B45309", badge_bg="#FEF3C7")
+
+    # 3. Helper to draw UML Use Case Ellipse with shadow
+    def draw_usecase(x, y, code, text, w=29.5, h=7.4, bg="#FFFFFF", border="#1D4ED8", code_bg="#1D4ED8", is_sub=False):
+        # Drop shadow
+        shadow = patches.Ellipse((x + 0.35, y - 0.35), w, h, edgecolor="none", facecolor="#CBD5E1", alpha=0.65, zorder=3)
+        ax.add_patch(shadow)
+
+        ellipse = patches.Ellipse(
+            (x, y), w, h,
+            edgecolor=border, facecolor=bg,
+            linewidth=1.5 if not is_sub else 1.3,
+            linestyle="-" if not is_sub else "--",
+            zorder=4
+        )
         ax.add_patch(ellipse)
-        ax.text(x, y, text, fontsize=9.2, ha="center", va="center", color="#0F172A", weight="bold" if border=="#2563EB" else "normal")
 
-    # Draw Actors
-    draw_actor(14, 88, "Nhân viên soát vé\n(Staff - Mobile)", color="#047857")
-    draw_actor(14, 30, "Quản trị viên\n(Admin - Web)", color="#1E3A8A")
-    draw_actor(126, 58, "Hệ thống AI / Camera\n(System Actor)", color="#B45309")
+        if code:
+            full_label = f"{code}: {text}"
+            ax.text(
+                x, y, full_label,
+                fontsize=8.9, fontweight="bold",
+                ha="center", va="center", color="#0F172A",
+                linespacing=1.22, zorder=5
+            )
+        else:
+            ax.text(
+                x, y, text,
+                fontsize=8.5, fontweight="semibold" if not is_sub else "normal",
+                ha="center", va="center", color="#1E293B",
+                linespacing=1.2, zorder=5
+            )
 
-    # Main Core Use Cases (Center column)
-    usecases = {
-        "uc01": (53, 98, "UC01: Đăng nhập\nhệ thống"),
-        "uc02": (53, 85, "UC02: Quét mã QR\nsoát vé"),
-        "uc03": (53, 72, "UC03: Đồng bộ vé\n(Offline / Online)"),
-        "uc04": (53, 56, "UC04: Phân tích ảnh\n& đối soát ghế AI"),
-        "uc05": (53, 40, "UC05: Tiếp nhận &\nxử lý cảnh báo"),
-        "uc06": (53, 26, "UC06: Báo cáo &\nxử lý sự cố rạp"),
-        "uc_handover": (53, 13, "Bàn giao ca trực"),
-        
-        # Included / Sub Use Cases (Right inside system boundary)
-        "inc_check": (92, 85, "<<include>>\nKiểm tra hợp lệ &\nChống quét trùng"),
-        "inc_yolo": (92, 67, "<<include>>\nNhận diện đầu người\nYOLOv8n"),
-        "inc_map": (92, 54, "<<include>>\nÁnh xạ đa giác ghế\nPoint-in-Polygon"),
-        "inc_diff": (92, 41, "<<include>>\nĐối soát logic tập hợp\n(B trừ A)"),
-
-        # Admin extra features
-        "adm_dash": (53, 6, "Xem Dashboard SOC\n& Thống kê"),
+    # 4. Define Use Cases in Planar 3-Column Layout
+    # Left Column (x = 49.0): Primary Actor Use Cases
+    left_ucs = {
+        "uc03": (49.0, 105.0, "UC03", "Quét mã QR soát vé\ntại cửa phòng chiếu", "#FFFFFF", "#059669"),
+        "uc04": (49.0, 93.0,  "UC04", "Đồng bộ vé Offline-First\n(Hive Box → Server)", "#FFFFFF", "#059669"),
+        "uc08": (49.0, 81.0,  "UC08", "Tổng kết & Bàn giao\nca trực", "#FFFFFF", "#059669"),
+        "uc01": (49.0, 69.0,  "UC01", "Đăng nhập & Nhận diện\nca trực tự động", "#EFF6FF", "#1D4ED8"),
+        "uc06": (49.0, 57.0,  "UC06", "Tiếp nhận & Xử lý cảnh báo\ntheo phòng (1 chạm)", "#EFF6FF", "#1D4ED8"),
+        "uc07": (49.0, 45.0,  "UC07", "Báo cáo & Xử lý sự cố\ncơ sở vật chất (kèm ảnh)", "#EFF6FF", "#1D4ED8"),
+        "uc02": (49.0, 31.0,  "UC02", "Quản lý phim TMDB &\nLập lịch chiếu tự động", "#FFFFFF", "#1E3A8A"),
+        "uc09": (49.0, 17.0,  "UC09", "Quản lý Nhân sự, Phòng\n& Xem Dashboard SOC", "#FFFFFF", "#1E3A8A"),
     }
 
-    # Draw regular usecases
-    for k, (ux, uy, utext) in usecases.items():
-        if k.startswith("inc_"):
-            draw_usecase(ux, uy, utext, w=22, h=6.5, bg="#FEF3C7", border="#D97706", lw=1.3, ls='--')
-        else:
-            draw_usecase(ux, uy, utext, w=23, h=6.5, bg="#EFF6FF", border="#2563EB", lw=1.6)
+    for k, (ux, uy, ucode, utext, ubg, uborder) in left_ucs.items():
+        draw_usecase(ux, uy, ucode, utext, w=30.0, h=7.8, bg=ubg, border=uborder)
 
-    # Connect lines from Staff
-    staff_pt = (17, 85)
-    for target in ["uc01", "uc02", "uc03", "uc05", "uc06", "uc_handover"]:
-        tx, ty, _ = usecases[target]
-        ax.annotate("", xy=(tx - 11.5, ty), xytext=staff_pt,
-                    arrowprops=dict(arrowstyle="->", color="#047857", lw=1.4))
+    # Center Column (x = 88.5): Included Sub-Use Cases
+    sub_ucs = {
+        "inc_qr":   (88.5, 105.0, "", "Kiểm tra hợp lệ &\nChống quét trùng (Anti-passback)"),
+        "inc_yolo": (88.5, 86.0,  "", "Nhận diện đầu người\n(Mô hình YOLOv8n)"),
+        "inc_map":  (88.5, 68.0,  "", "Chiếu điểm neo 78% &\nÁnh xạ đa giác ghế (1–1)"),
+        "inc_diff": (88.5, 50.0,  "", "Đối soát tập hợp (B \\ A, A \\ B)\n& Kiểm tra vượt tải"),
+    }
 
-    # Connect lines from Admin
-    admin_pt = (17, 30)
-    for target in ["uc01", "uc04", "uc05", "uc06", "adm_dash"]:
-        tx, ty, _ = usecases[target]
-        ax.annotate("", xy=(tx - 11.5, ty), xytext=admin_pt,
-                    arrowprops=dict(arrowstyle="->", color="#1E3A8A", lw=1.4))
+    for k, (ux, uy, ucode, utext) in sub_ucs.items():
+        draw_usecase(ux, uy, ucode, utext, w=29.0, h=7.8, bg="#FEF3C7", border="#D97706", is_sub=True)
 
-    # Connect lines from AI System
-    ai_pt = (123, 58)
-    for target in ["uc04", "uc05"]:
-        tx, ty, _ = usecases[target]
-        ax.annotate("", xy=(tx + 11.5, ty), xytext=ai_pt,
-                    arrowprops=dict(arrowstyle="->", color="#B45309", lw=1.5))
+    # Right Column (x = 125.0): Core AI Engine Use Case
+    uc05_pos = (125.0, 68.0)
+    draw_usecase(
+        uc05_pos[0], uc05_pos[1],
+        "UC05", "Phân tích ảnh Camera &\nĐối soát ghế AI tự động",
+        w=28.5, h=8.6, bg="#FFF7ED", border="#C2410C"
+    )
 
-    # Connect include arrows (dashed)
-    def connect_include(src_k, dst_k):
-        sx, sy, _ = usecases[src_k]
-        dx, dy, _ = usecases[dst_k]
-        ax.annotate("", xy=(dx - 11, dy), xytext=(sx + 11.5, sy),
-                    arrowprops=dict(arrowstyle="->", color="#475569", lw=1.3, ls="--"))
+    # 5. Draw Solid Association Lines (Actors <-> Primary Use Cases)
+    # Staff associations (Top-Left Actor)
+    staff_anchor = (21.5, 88.0)
+    for target_key in ["uc03", "uc04", "uc08", "uc01", "uc06", "uc07"]:
+        tx, ty, *_ = left_ucs[target_key]
+        ax.plot(
+            [staff_anchor[0], tx - 15.0],
+            [staff_anchor[1], ty],
+            color="#047857", linewidth=1.45, zorder=3
+        )
 
-    connect_include("uc02", "inc_check")
-    connect_include("uc04", "inc_yolo")
-    connect_include("uc04", "inc_map")
-    connect_include("uc04", "inc_diff")
+    # Admin associations (Bottom-Left Actor)
+    admin_anchor = (21.5, 36.0)
+    for target_key in ["uc01", "uc06", "uc07", "uc02", "uc09"]:
+        tx, ty, *_ = left_ucs[target_key]
+        ax.plot(
+            [admin_anchor[0], tx - 15.0],
+            [admin_anchor[1], ty],
+            color="#1E3A8A", linewidth=1.45, zorder=3
+        )
+
+    # Admin -> UC05 (Manual AI trigger) routed cleanly through the open corridor y=24.0 between UC02 (y=31) and UC09 (y=17)
+    verts = [
+        admin_anchor,
+        (36.0, 24.0),
+        (72.0, 23.0),
+        (105.0, 24.5),
+        (122.0, 38.0),
+        (uc05_pos[0], uc05_pos[1] - 4.3)
+    ]
+    codes = [Path.MOVETO, Path.CURVE3, Path.CURVE3, Path.CURVE4, Path.CURVE4, Path.CURVE4]
+    curve_patch = patches.PathPatch(
+        Path(verts, codes),
+        facecolor="none", edgecolor="#1E3A8A", lw=1.45, linestyle="-", zorder=3
+    )
+    ax.add_patch(curve_patch)
+    ax.text(
+        92.0, 25.2, "Kích hoạt quét AI thủ công",
+        fontsize=8.2, style="italic", fontweight="semibold", color="#1E3A8A", ha="center", va="center",
+        bbox=dict(boxstyle="round,pad=0.22", facecolor="#FFFFFF", edgecolor="#BFDBFE", lw=0.8),
+        zorder=5
+    )
+
+    # AI / Camera Actor -> UC05 (Direct horizontal connection on the right)
+    ai_anchor = (150.5, 68.0)
+    ax.plot(
+        [ai_anchor[0], uc05_pos[0] + 14.3],
+        [ai_anchor[1], uc05_pos[1]],
+        color="#B45309", linewidth=1.8, zorder=3
+    )
+
+    # 6. Helper to draw UML <<include>> / <<extend>> dashed arrows with pill badge
+    def draw_stereotype_arrow(start_xy, end_xy, label="«include»", color="#475569", label_pos=0.5):
+        ax.annotate(
+            "",
+            xy=end_xy, xytext=start_xy,
+            arrowprops=dict(
+                arrowstyle="->", color=color, lw=1.35,
+                linestyle="--", shrinkA=0, shrinkB=0
+            ),
+            zorder=4
+        )
+        lx = start_xy[0] + (end_xy[0] - start_xy[0]) * label_pos
+        ly = start_xy[1] + (end_xy[1] - start_xy[1]) * label_pos
+        ax.text(
+            lx, ly, label,
+            fontsize=7.8, style="italic", fontweight="bold", color=color,
+            ha="center", va="center",
+            bbox=dict(boxstyle="round,pad=0.18", facecolor="#FFFFFF", edgecolor=color, lw=0.7),
+            zorder=6
+        )
+
+    # UC03 --<<include>>--> inc_qr
+    draw_stereotype_arrow(
+        (49.0 + 15.0, 105.0),
+        (88.5 - 14.5, 105.0),
+        label="«include»", color="#047857"
+    )
+
+    # UC05 --<<include>>--> inc_yolo, inc_map, inc_diff
+    draw_stereotype_arrow(
+        (uc05_pos[0] - 13.0, uc05_pos[1] + 2.2),
+        (88.5 + 14.5, 86.0),
+        label="«include»", color="#B45309", label_pos=0.48
+    )
+    draw_stereotype_arrow(
+        (uc05_pos[0] - 14.3, uc05_pos[1]),
+        (88.5 + 14.5, 68.0),
+        label="«include»", color="#B45309", label_pos=0.5
+    )
+    draw_stereotype_arrow(
+        (uc05_pos[0] - 13.0, uc05_pos[1] - 2.2),
+        (88.5 + 14.5, 50.0),
+        label="«include»", color="#B45309", label_pos=0.48
+    )
+
+    # UC06 --<<extend>>--> inc_diff (Triggered when discrepancy B \ A is detected)
+    draw_stereotype_arrow(
+        (49.0 + 15.0, 57.0),
+        (88.5 - 14.5, 50.0),
+        label="«extend»", color="#DC2626", label_pos=0.5
+    )
+
+    # 7. Legend Bar at Bottom
+    legend_box = patches.FancyBboxPatch(
+        (29.0, 0.8), 113.0, 4.2,
+        boxstyle="round,pad=0.4,rounding_size=1.0",
+        edgecolor="#CBD5E1", facecolor="#F8FAFC", linewidth=1.0, zorder=3
+    )
+    ax.add_patch(legend_box)
+    ax.text(33.0, 2.9, "Chú giải UML:", fontsize=8.8, fontweight="bold", color="#0F172A", va="center", zorder=5)
+    ax.plot([46.0, 52.0], [2.9, 2.9], color="#1E3A8A", lw=1.8, zorder=5)
+    ax.text(53.0, 2.9, "Quan hệ tương tác (Association)", fontsize=8.4, color="#334155", va="center", zorder=5)
+    ax.plot([81.0, 87.0], [2.9, 2.9], color="#B45309", lw=1.6, ls="--", zorder=5)
+    ax.text(88.0, 2.9, "«include» Quan hệ bắt buộc", fontsize=8.4, color="#334155", va="center", zorder=5)
+    ax.plot([114.0, 120.0], [2.9, 2.9], color="#DC2626", lw=1.6, ls="--", zorder=5)
+    ax.text(121.0, 2.9, "«extend» Mở rộng khi có vi phạm", fontsize=8.4, color="#334155", va="center", zorder=5)
 
     plt.tight_layout()
-    plt.savefig(DIAGRAM_PATH, bbox_inches='tight')
+    plt.savefig(DIAGRAM_PATH, bbox_inches="tight", facecolor="#FFFFFF")
     plt.close()
-    print("Generated diagram successfully at:", DIAGRAM_PATH)
+    print("Generated professional Use Case diagram at:", DIAGRAM_PATH)
+
 
 def set_cell_background(cell, fill_hex):
     tcPr = cell._tc.get_or_add_tcPr()
     tcPr.append(parse_xml(f'<w:shd {nsdecls("w")} w:fill="{fill_hex}"/>'))
 
-def set_cell_margins(cell, top=120, bottom=120, left=160, right=160):
+
+def set_cell_margins(cell, top=100, bottom=100, left=140, right=140):
     tcPr = cell._tc.get_or_add_tcPr()
-    tcMar = OxmlElement('w:tcMar')
-    for m, val in [('top', top), ('bottom', bottom), ('left', left), ('right', right)]:
-        node = OxmlElement(f'w:{m}')
-        node.set(qn('w:w'), str(val))
-        node.set(qn('w:type'), 'dxa')
+    tcMar = OxmlElement("w:tcMar")
+    for m, val in [("top", top), ("bottom", bottom), ("left", left), ("right", right)]:
+        node = OxmlElement(f"w:{m}")
+        node.set(qn("w:w"), str(val))
+        node.set(qn("w:type"), "dxa")
         tcMar.append(node)
     tcPr.append(tcMar)
 
-def set_cell_borders(cell, color="A6A6A6", sz="4"):
+
+def set_cell_borders(cell, color="808080", sz="4"):
     tcPr = cell._tc.get_or_add_tcPr()
     tcBorders = parse_xml(f'''
         <w:tcBorders {nsdecls("w")}>
@@ -152,28 +353,28 @@ def set_cell_borders(cell, color="A6A6A6", sz="4"):
     ''')
     tcPr.append(tcBorders)
 
+
 def build_docx():
     generate_usecase_diagram()
     doc = Document()
 
-    # Configure Margins: Top 2cm, Bottom 2cm, Left 3cm, Right 2cm
-    sections = doc.sections
-    for section in sections:
-        section.top_margin = Inches(0.79)      # 2.0 cm
-        section.bottom_margin = Inches(0.79)   # 2.0 cm
-        section.left_margin = Inches(1.18)     # 3.0 cm
-        section.right_margin = Inches(0.79)    # 2.0 cm
+    # Configure standard academic margins: Left 3.0cm, Right 2.0cm, Top 2.0cm, Bottom 2.0cm
+    for section in doc.sections:
+        section.top_margin = Inches(0.79)
+        section.bottom_margin = Inches(0.79)
+        section.left_margin = Inches(1.18)
+        section.right_margin = Inches(0.79)
 
-    # Default Style Font
-    normal_style = doc.styles['Normal']
-    normal_style.font.name = 'Times New Roman'
+    # Default Normal style
+    normal_style = doc.styles["Normal"]
+    normal_style.font.name = "Times New Roman"
     normal_style.font.size = Pt(13)
     normal_style.font.color.rgb = RGBColor(0, 0, 0)
     normal_style.paragraph_format.line_spacing = 1.3
     normal_style.paragraph_format.space_after = Pt(4)
     normal_style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-    def add_p(text, bold_prefix="", italic_prefix="", bold=False, italic=False, space_after=4, align=WD_ALIGN_PARAGRAPH.JUSTIFY):
+    def add_p(text, bold_prefix="", bold=False, italic=False, space_after=4, align=WD_ALIGN_PARAGRAPH.JUSTIFY):
         p = doc.add_paragraph()
         p.alignment = align
         p.paragraph_format.space_after = Pt(space_after)
@@ -181,39 +382,37 @@ def build_docx():
         if bold_prefix:
             r = p.add_run(bold_prefix)
             r.bold = True
-            r.font.name = 'Times New Roman'
-        if italic_prefix:
-            r = p.add_run(italic_prefix)
-            r.italic = True
-            r.font.name = 'Times New Roman'
+            r.font.name = "Times New Roman"
+            r.font.size = Pt(13)
         r2 = p.add_run(text)
         r2.bold = bold
         r2.italic = italic
-        r2.font.name = 'Times New Roman'
+        r2.font.name = "Times New Roman"
+        r2.font.size = Pt(13)
         return p
 
     def add_h1(text):
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.space_before = Pt(12)
+        p.paragraph_format.space_before = Pt(6)
         p.paragraph_format.space_after = Pt(12)
         r = p.add_run(text)
         r.bold = True
         r.font.size = Pt(16)
-        r.font.name = 'Times New Roman'
-        r.font.color.rgb = RGBColor(15, 23, 42)
+        r.font.name = "Times New Roman"
+        r.font.color.rgb = RGBColor(0, 0, 0)
         return p
 
     def add_h2(text):
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        p.paragraph_format.space_before = Pt(12)
+        p.paragraph_format.space_before = Pt(10)
         p.paragraph_format.space_after = Pt(6)
         r = p.add_run(text)
         r.bold = True
         r.font.size = Pt(14)
-        r.font.name = 'Times New Roman'
-        r.font.color.rgb = RGBColor(30, 58, 138)
+        r.font.name = "Times New Roman"
+        r.font.color.rgb = RGBColor(0, 0, 0)
         return p
 
     def add_h3(text):
@@ -224,21 +423,23 @@ def build_docx():
         r = p.add_run(text)
         r.bold = True
         r.font.size = Pt(13)
-        r.font.name = 'Times New Roman'
-        r.font.color.rgb = RGBColor(15, 23, 42)
+        r.font.name = "Times New Roman"
+        r.font.color.rgb = RGBColor(0, 0, 0)
         return p
 
     def add_bullet(text, bold_prefix=""):
-        p = doc.add_paragraph(style='List Bullet')
+        p = doc.add_paragraph(style="List Bullet")
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p.paragraph_format.space_after = Pt(3)
         p.paragraph_format.line_spacing = 1.25
         if bold_prefix:
             r = p.add_run(bold_prefix)
             r.bold = True
-            r.font.name = 'Times New Roman'
+            r.font.name = "Times New Roman"
+            r.font.size = Pt(13)
         r2 = p.add_run(text)
-        r2.font.name = 'Times New Roman'
+        r2.font.name = "Times New Roman"
+        r2.font.size = Pt(13)
         return p
 
     def format_table(table, col_widths, align_cols=None):
@@ -248,11 +449,11 @@ def build_docx():
             for col_idx, cell in enumerate(row.cells):
                 cell.width = Inches(col_widths[col_idx])
                 cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-                set_cell_borders(cell, color="B0B0B0", sz="4")
-                set_cell_margins(cell, top=100, bottom=100, left=140, right=140)
-                
+                set_cell_borders(cell, color="808080", sz="4")
+                set_cell_margins(cell, top=90, bottom=90, left=130, right=130)
+
                 if is_header:
-                    set_cell_background(cell, "DCE6F1")
+                    set_cell_background(cell, "D9E1F2")
                     for p in cell.paragraphs:
                         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                         p.paragraph_format.space_after = Pt(0)
@@ -270,156 +471,207 @@ def build_docx():
                             r.font.name = "Times New Roman"
                             r.font.size = Pt(12)
 
-    # ==========================
-    # 2. DOCUMENT BODY
-    # ==========================
+    # =====================================================
+    # DOCUMENT CONTENT (MATCHING USER TEMPLATE EXACTLY)
+    # =====================================================
 
     add_h1("CHƯƠNG 2: PHÂN TÍCH YÊU CẦU")
 
+    # 2.1. Khảo sát hiện trạng
     add_h2("2.1. Khảo sát hiện trạng")
-    add_p("Hiện nay, quy trình soát vé và kiểm soát khán giả tại các cụm rạp chiếu phim phần lớn vẫn thực hiện theo phương thức bán thủ công truyền thống: khán giả nhận vé in nhiệt tại quầy hoặc xuất trình mã vé điện tử trên điện thoại, sau đó nhân viên kiểm soát tại cửa phòng chiếu sẽ kiểm tra bằng mắt thường hoặc dùng máy quét mã vạch độc lập để cho khách vào phòng. Đối với việc kiểm đếm số lượng khán giả thực tế bên trong phòng chiếu, nhân viên phải trực tiếp đi vào từng rạp (thường trong điều kiện phòng chiếu tối, phim đã bắt đầu chiếu) để đếm thủ công, sau đó ghi chép và đối chiếu lại với số vé bán ra trên hệ thống quản lý rạp (POS).")
-    
-    add_p("Quy trình quản lý thủ công này bộc lộ nhiều khó khăn và rủi ro nghiêm trọng:")
-    add_bullet(" Khán giả sau khi vào rạp có thể tự ý di chuyển từ các vị trí ghế thường lên các vị trí ghế VIP trống, hoặc cố tình ở lại phòng chiếu sau khi kết thúc suất chiếu để xem tiếp các suất chiếu sau mà không mua vé.", bold_prefix="1. Thất thoát doanh thu và hiện tượng gian lận ('xem phim chui'):")
-    add_bullet(" Phòng chiếu phim có diện tích rộng, bố trí dạng bậc thang dốc và ánh sáng tắt tối khi phim bắt đầu chiếu. Việc nhân viên đi lại đếm từng người gây bất tiện, làm gián đoạn trải nghiệm của khán giả khác và tỷ lệ sai sót số lượng là rất cao.", bold_prefix="2. Khó khăn trong việc kiểm đếm trong điều kiện thiếu sáng:")
-    add_bullet(" Một nhân viên tại cụm rạp thường phải kiêm nhiệm nhiều đầu việc cùng lúc (soát vé tại cửa rạp, hướng dẫn chỗ ngồi, kiểm tra vệ sinh, giám sát an ninh phòng chiếu). Khi lượng khách đông vào các khung giờ cao điểm hoặc dịp lễ Tết, việc kiểm soát vé tại cửa dễ xảy ra tình trạng sót vé, quét trùng hoặc không kịp phát hiện vé sai suất/sai phòng.", bold_prefix="3. Quá tải áp lực lên nhân viên vận hành:")
-    add_bullet(" Các cụm rạp hiện nay đều đã trang bị hệ thống camera an ninh (CCTV) trong phòng chiếu, tuy nhiên camera chỉ đóng vai trò ghi hình thụ động (lưu trữ video để xem lại khi có sự cố). Chưa có cơ chế tự động hóa kết nối giữa luồng hình ảnh camera với cơ sở dữ liệu vé đã soát để phát hiện ngay lập tức các trường hợp bất thường.", bold_prefix="4. Thiếu sự liên thông dữ liệu thời gian thực giữa camera và hệ thống vé:")
+    add_p(
+        "Hiện nay, quy trình soát vé và kiểm soát khán giả tại các cụm rạp chiếu phim phần lớn vẫn thực hiện theo phương thức bán thủ công truyền thống: khán giả nhận vé in nhiệt tại quầy hoặc xuất trình mã vé điện tử trên điện thoại, sau đó nhân viên kiểm soát tại cửa phòng chiếu kiểm tra bằng mắt thường hoặc dùng thiết bị quét độc lập để cho khách vào phòng. Đối với việc kiểm đếm số lượng khán giả thực tế bên trong phòng chiếu, nhân viên phải trực tiếp đi vào từng rạp (trong điều kiện phòng chiếu tắt đèn tối khi phim đã bắt đầu chiếu) để đếm thủ công và đối chiếu lại với số vé bán ra trên hệ thống POS."
+    )
+    add_p(
+        "Hiện nay, việc kiểm soát vé tại cửa rạp và đối soát số lượng khán giả thực tế trong phòng chiếu còn gặp nhiều khó khăn như:"
+    )
+    add_bullet(
+        " Khán giả sau khi qua cổng soát vé có thể tự ý di chuyển từ ghế thường lên các hàng ghế VIP/Sweetbox đang trống, hoặc cố tình ở lại phòng chiếu sau khi hết phim để xem tiếp các suất chiếu kế tiếp mà không mua vé.",
+        bold_prefix="Thất thoát doanh thu và hiện tượng gian lận ('xem phim chui'):"
+    )
+    add_bullet(
+        " Phòng chiếu có diện tích rộng, bố trí bậc thang dốc và ánh sáng rất yếu. Việc nhân viên đi lại đếm người bằng mắt thường gây gián đoạn trải nghiệm thưởng thức bộ phim của khán giả và thường xuyên xảy ra sai số.",
+        bold_prefix="Khó khăn khi kiểm đếm thủ công trong môi trường thiếu sáng:"
+    )
+    add_bullet(
+        " Nhân viên rạp phải kiêm nhiệm nhiều công việc cùng lúc (soát vé tại cửa, hướng dẫn vị trí ghế, kiểm tra vệ sinh và cơ sở vật chất). Vào các khung giờ cao điểm hoặc dịp lễ Tết, việc kiểm soát dễ xảy ra sót vé, quét trùng hoặc không phát hiện kịp thời vé sai phòng, sai suất chiếu.",
+        bold_prefix="Quá tải áp lực lên nhân sự vận hành hiện trường:"
+    )
+    add_bullet(
+        " Mặc dù các phòng chiếu đều đã lắp đặt camera an ninh (CCTV), nhưng dữ liệu hình ảnh chỉ dừng ở mức ghi hình thụ động để trích xuất lại khi cần, chưa có cơ chế tự động kết nối với cơ sở dữ liệu vé điện tử để phát hiện tức thời các vị trí ghế ngồi bất hợp lệ.",
+        bold_prefix="Thiếu sự liên thông dữ liệu thời gian thực giữa camera phòng chiếu và hệ thống vé:"
+    )
+    add_p(
+        "Do đó, việc xây dựng hệ thống CineSight (Hệ thống soát vé và kiểm đếm khán giả rạp chiếu phim ứng dụng thị giác máy tính trên ảnh camera phòng chiếu) là cần thiết nhằm tự động hóa toàn diện quy trình đối soát, nâng cao hiệu suất làm việc của nhân sự và ngăn chặn triệt để thất thoát doanh thu."
+    )
 
-    add_p("Do đó, việc nghiên cứu và xây dựng hệ thống \"CineSight - Hệ thống soát vé và kiểm đếm khán giả rạp chiếu phim ứng dụng thị giác máy tính trên ảnh camera phòng chiếu\" là hoàn toàn cấp thiết, nhằm tự động hóa toàn diện khâu đối soát, tối ưu hóa năng suất vận hành của nhân viên và ngăn chặn triệt để thất thoát doanh thu cho rạp.")
-
-    # --------------------------
+    # 2.2. Yêu cầu chức năng
     add_h2("2.2. Yêu cầu chức năng")
-    add_p("Dựa trên kiến trúc và phạm vi thực tế của hệ thống CineSight, các yêu cầu chức năng được phân rã chi tiết theo từng tác nhân (Actor) tham gia vào hệ thống như sau:")
+    add_p("Các chức năng của hệ thống CineSight được phân tích và liệt kê chi tiết theo từng tác nhân (Actor) như sau:")
 
-    add_h3("2.2.1. Chức năng của Quản trị viên (Admin - Web Admin)")
-    add_bullet(" Thêm mới tài khoản nhân viên soát vé (họ và tên, tên đăng nhập, mật khẩu, số điện thoại, vai trò). Phân công ca làm việc (Ca sáng, Ca chiều, Ca tối) và gán phòng chiếu phụ trách. Chỉnh sửa thông tin, cập nhật ca trực hoặc xóa tài khoản nhân viên.", bold_prefix="Quản lý người dùng (CRUD Nhân viên):")
-    add_bullet(" Xem danh sách toàn bộ các phòng chiếu trong cụm rạp kèm theo các thông số cấu hình: tổng số ghế, số hàng, số cột, trạng thái sẵn sàng. Xem sơ đồ ghế 2D trực quan tương ứng với ma trận cấu hình của từng phòng chiếu.", bold_prefix="Quản lý phòng chiếu (Rooms):")
-    add_bullet(" Xem danh mục lịch chiếu phim theo từng ngày và theo từng phòng chiếu. Tạo mới suất chiếu: chọn phim, chọn phòng chiếu, thiết lập thời gian bắt đầu và thời gian kết thúc.", bold_prefix="Quản lý suất chiếu (Showtimes):")
-    add_bullet(" Tra cứu và xem danh sách toàn bộ các vé đã được soát hợp lệ tại cổng theo từng phòng chiếu và suất chiếu cụ thể (mã vé, số ghế, loại ghế, thời điểm soát, nhân viên thực hiện).", bold_prefix="Quản lý danh sách vé (Tickets):")
-    add_bullet(" Tải ảnh chụp khung hình (snapshot) từ camera CCTV phòng chiếu lên hệ thống. Kích hoạt tiến trình AI phân tích tự động: chạy mô hình nhận diện đầu người, ánh xạ tọa độ vào sơ đồ ghế và thực hiện đối soát tự động với danh sách vé đã quét.", bold_prefix="Giám sát và kích hoạt phân tích AI:")
-    add_bullet(" Theo dõi các chỉ số vận hành tổng quan theo thời gian thực: tổng số vé đã quét trong ngày, tỷ lệ lấp đầy ghế (Occupancy Rate), tổng số cảnh báo vi phạm an ninh chưa xử lý. Quan sát trạng thái hoạt động tức thời của các phòng chiếu.", bold_prefix="Xem báo cáo, thống kê (Dashboard SOC):")
-    add_bullet(" Tiếp nhận danh sách các cảnh báo chênh lệch vé do AI tự động gửi về, phân loại theo các nhóm: Khách lậu / Ngồi sai ghế không vé (B \\ A), Khách vắng mặt (A \\ B), và Cảnh báo vượt tải phòng chiếu (Over-capacity). Xem chi tiết danh sách mã ghế vi phạm kèm ảnh bằng chứng phân tích. Thực hiện thao tác \"Đánh dấu đã xử lý\" sau khi nhân viên rạp đã xử lý xong tại hiện trường.", bold_prefix="Quản lý cảnh báo vi phạm (Alerts):")
-    add_bullet(" Tiếp nhận các báo cáo sự cố cơ sở vật chất (ghế hỏng/gãy, lỗi điều hòa, rác bẩn) do nhân viên gửi từ ứng dụng di động. Cập nhật trạng thái xử lý sự cố (Đang chờ xử lý → Đã khắc phục).", bold_prefix="Quản lý sự cố rạp chiếu (Incidents):")
+    # 2.2.1. Chức năng của Admin
+    add_h3("2.2.1. Chức năng của Admin")
+    add_bullet(
+        " Thêm mới, chỉnh sửa, đặt lại mật khẩu và xóa tài khoản nhân sự (mã nhân viên, họ và tên, tên đăng nhập, mật khẩu, vai trò Quản lý hoặc Soát vé). Hệ thống tự động nhận diện ca làm việc (Dynamic Shift) theo thời điểm đăng nhập thực tế trong ngày: khi nhân sự chưa đăng nhập hiển thị 'Chưa có'; khi đăng nhập tự động xác định ca trực (Nhân viên: Ca sáng 07:30–13:00, Ca chiều 13:00–16:00, Ca tối 16:00–23:00; Quản lý: Ca sáng 07:30–16:00, Ca tối 16:30–24:00). Hỗ trợ theo dõi trạng thái trực tuyến ('Đang trực' / 'Ngoại tuyến'), khóa mềm tài khoản (is_active = 0) để bảo toàn khóa ngoại 3NF và chặn tài khoản nhân viên soát vé đăng nhập vào Web Admin (403 Forbidden).",
+        bold_prefix="Quản lý người dùng (CRUD Nhân sự & Ca trực tự động):"
+    )
+    add_bullet(
+        " Quản lý danh mục phim chiếu rạp (tên phim, thời lượng, thể loại, phân loại độ tuổi P/K/T13/T16/T18, poster) đồng bộ từ cơ sở dữ liệu điện ảnh quốc tế TMDB. Quản lý cấu hình 4 phòng chiếu kèm sơ đồ ghế 2D trực quan (Phòng 1, 2, 4 gồm 136 ghế - 12 hàng A..L; Phòng 3 VIP/Sweetbox gồm 132 ghế - 10 hàng A..J). Tạo suất chiếu thủ công hoặc kích hoạt trình lập lịch chiếu tự động chống chồng lấn khung giờ (tự động cộng 15 phút dọn vệ sinh giữa hai suất).",
+        bold_prefix="Quản lý danh mục phim TMDB, phòng chiếu và lịch chiếu:"
+    )
+    add_bullet(
+        " Xem bảng điều khiển trung tâm (Dashboard SOC) thống kê theo thời gian thực tổng số vé đã quét, tỷ lệ lấp đầy ghế (Occupancy Rate), số lượng cảnh báo vi phạm chưa xử lý, lịch sử vé đã soát và nhật ký kiểm toán suy luận AI (ai_inference_logs).",
+        bold_prefix="Xem báo cáo, thống kê (Dashboard SOC & Nhật ký kiểm toán):"
+    )
+    add_bullet(
+        " Tải ảnh snapshot từ camera CCTV phòng chiếu để kích hoạt phân tích AI theo yêu cầu. Tiếp nhận danh sách cảnh báo vi phạm được gom nhóm theo từng phòng chiếu (hiển thị 3 chỉ số: Vé đã quét, Trong rạp, Ghế vi phạm), xem ảnh bằng chứng khoanh vùng AI và xác nhận xử lý từng ghế hoặc 'Xử lý toàn bộ phòng (1 chạm)'. Tiếp nhận và cập nhật trạng thái khắc phục các sự cố cơ sở vật chất (status: open -> resolved) do nhân viên gửi về.",
+        bold_prefix="Giám sát phân tích AI, quản lý cảnh báo theo phòng và xử lý sự cố:"
+    )
 
-    add_h3("2.2.2. Chức năng của Nhân viên soát vé (User / Staff - Mobile App)")
-    add_bullet(" Đăng nhập vào ứng dụng bằng tài khoản nhân viên (username/password) đã được cấp. Xem thông tin ca trực hiện tại và danh sách phòng chiếu được phân công phụ trách.", bold_prefix="Đăng nhập và quản lý phiên làm việc:")
-    add_bullet(" Lựa chọn phòng chiếu và suất chiếu sắp diễn ra để chuẩn bị quy trình mở cửa đón khách và soát vé.", bold_prefix="Lựa chọn phòng chiếu và suất chiếu:")
-    add_bullet(" Kích hoạt camera điện thoại để quét mã vạch / mã QR trên vé của khán giả. Kiểm tra tính hợp lệ tức thì: kiểm tra định dạng vé, đối chiếu đúng phòng chiếu, đúng suất chiếu. Thực hiện cơ chế chống quét trùng vé (Anti-passback): từ chối các mã vé đã được quét trước đó để ngăn chặn hành vi một vé sử dụng cho nhiều người.", bold_prefix="Quét mã QR soát vé (Scanner):")
-    add_bullet(" Tự động lưu trữ cục bộ toàn bộ dữ liệu vé đã quét vào cơ sở dữ liệu nội bộ trên thiết bị (Hive Box), đảm bảo ứng dụng hoạt động thông suốt ngay cả khi rạp bị mất kết nối mạng. Tự động đồng bộ (Auto-sync) toàn bộ danh sách vé hợp lệ lên máy chủ trung tâm ngay khi thiết bị có kết nối mạng Internet.", bold_prefix="Lưu trữ ngoại tuyến và đồng bộ dữ liệu (Offline-First):")
-    add_bullet(" Xem danh sách chi tiết các vé đã quét thành công trong ca trực (mã vé, số ghế, giờ quét).", bold_prefix="Xem lịch sử soát vé:")
-    add_bullet(" Xem trực quan sơ đồ ghế 2D của phòng chiếu để hỗ trợ hướng dẫn vị trí ngồi cho khán giả.", bold_prefix="Xem sơ đồ ghế phòng chiếu:")
-    add_bullet(" Nhận thông báo chuông/rung và xem chi tiết cảnh báo từ hệ thống AI khi phát hiện có người ngồi ghế không hợp lệ tại phòng chiếu mình đang phụ trách.", bold_prefix="Tiếp nhận thông báo và cảnh báo an ninh:")
-    add_bullet(" Tạo phiếu báo cáo sự cố cơ sở vật chất (chọn loại sự cố, nhập vị trí ghế hỏng, mô tả chi tiết) để chuyển về cho Quản trị viên xử lý.", bold_prefix="Báo cáo sự cố phòng chiếu:")
-    add_bullet(" Thực hiện thao tác tổng kết số lượng vé đã soát, số lượng sự cố phát sinh và bàn giao ca làm việc cho nhân viên ca tiếp theo.", bold_prefix="Bàn giao ca trực (Shift Handover):")
+    # 2.2.2. Chức năng của User
+    add_h3("2.2.2. Chức năng của User")
+    add_bullet(
+        " Đăng nhập vào ứng dụng di động bằng tài khoản được cấp; hệ thống tự động ghi nhận giờ đăng nhập để hiển thị ca làm việc hiện tại (Ca sáng, Ca chiều, Ca tối) mà không cần gán cứng từ trước. Hỗ trợ xem hồ sơ cá nhân và đăng xuất an toàn.",
+        bold_prefix="Đăng nhập, tự động nhận diện ca trực và quản lý phiên làm việc:"
+    )
+    add_bullet(
+        " Linh hoạt lựa chọn bất kỳ phòng chiếu và suất chiếu nào đang diễn ra để làm nhiệm vụ. Tra cứu danh sách vé đã quét trong ca và xem trực quan sơ đồ ghế 2D của từng phòng chiếu (136 ghế hoặc 132 ghế) để hướng dẫn chỗ ngồi cho khán giả.",
+        bold_prefix="Xem, tìm kiếm phòng chiếu, suất chiếu, lịch sử vé và sơ đồ ghế 2D:"
+    )
+    add_bullet(
+        " Sử dụng camera điện thoại quét mã QR trên vé xem phim; kiểm tra tức thì định dạng vé, đúng phòng chiếu, đúng suất chiếu và chống quét trùng vé (Anti-passback). Tự động lưu trữ vé cục bộ vào Hive Box khi mất mạng (Offline-First) và tự động đồng bộ ngầm lên máy chủ ngay khi có kết nối Internet.",
+        bold_prefix="Quét mã QR soát vé và đồng bộ dữ liệu ngoại tuyến (Offline-First):"
+    )
+    add_bullet(
+        " Nhận thông báo chuông/rung khi AI phát hiện ghế có người ngồi nhưng chưa soát vé (B \\ A) và bấm nút 'Xử lý toàn bộ phòng (1 chạm)' ngay trên ứng dụng sau khi kiểm tra thực tế. Tạo báo cáo sự cố cơ sở vật chất (ghế hỏng, thiết bị, vệ sinh) kèm ảnh chụp hiện trường; các sự cố đã xử lý sẽ tự động ẩn sau 1 giờ hoặc cho phép xóa nhanh khỏi danh sách. Thực hiện tổng kết và bàn giao ca trực cuối ca.",
+        bold_prefix="Xử lý cảnh báo nhanh 1 chạm, báo cáo sự cố kèm ảnh và bàn giao ca:"
+    )
 
+    # 2.2.3. Chức năng của Hệ thống AI / Camera
     add_h3("2.2.3. Chức năng của Hệ thống AI / Camera (System Actor)")
-    add_bullet(" Tiếp nhận ảnh chụp snapshot độ phân giải cao (Full HD 1920x1080) từ camera an ninh góc cao (High-Angle CCTV) của phòng chiếu.", bold_prefix="Tiếp nhận dữ liệu hình ảnh:")
-    add_bullet(" Ứng dụng mô hình mạng nơ-ron tích chập YOLOv8n chuyên biệt để phát hiện chính xác vị trí tâm đầu người của toàn bộ khán giả trong điều kiện phòng chiếu tối/ánh sáng hồng ngoại.", bold_prefix="Nhận diện đầu người (Head Detection):")
-    add_bullet(" Áp dụng thuật toán hình học tính toán (Ray Casting) để kiểm tra điểm tâm đầu người (x, y) nằm bên trong vùng đa giác tọa độ của 136 vị trí ghế đã được hiệu chuẩn (Calibration Matrix).", bold_prefix="Ánh xạ tọa độ ghế (Point-in-Polygon):")
-    add_bullet(" Xác định tập hợp ghế có người ngồi thực tế (B); Truy vấn tập hợp các vé đã được nhân viên soát hợp lệ tại cổng (A); Tính toán chênh lệch: Ghế có người ngồi chui không có vé (B \\ A), Ghế đã soát vé nhưng thực tế để trống (A \\ B), Cảnh báo vượt công suất tối đa của phòng chiếu.", bold_prefix="Tự động đối soát logic tập hợp (Set Difference):")
-    add_bullet(" Tự động tạo bản ghi cảnh báo vi phạm lưu vào cơ sở dữ liệu máy chủ và phát thông báo tức thời tới Web Admin và Mobile App.", bold_prefix="Tự động sinh và lưu trữ cảnh báo:")
+    add_bullet(
+        " Tự động kích hoạt thu thập khung hình camera CCTV ở 3 mốc thời gian định kỳ mỗi suất chiếu (Đầu giờ, Giữa giờ, Cuối giờ) hoặc xử lý ngay khi nhận yêu cầu từ Quản trị viên.",
+        bold_prefix="Tự động thu thập ảnh theo lịch trình 3 mốc/suất:"
+    )
+    add_bullet(
+        " Thực thi mô hình học sâu YOLOv8n (imgsz=800, conf=0.28, iou=0.45) kết hợp Bộ lọc khử trùng khoảng cách phối cảnh (Perspective Distance Suppression) để nhận diện chính xác đầu người trong điều kiện thiếu sáng.",
+        bold_prefix="Nhận diện đầu người bằng mô hình YOLOv8n:"
+    )
+    add_bullet(
+        " Tính toán tọa độ điểm neo phối cảnh tại 78% chiều cao khung bao (y_anchor = y1 + 0.78*(y2 - y1)) nhằm triệt tiêu sai số thị sai giữa các hàng ghế dốc; thực hiện dò đa giác 3 bước (cv2.pointPolygonTest + bù dung sai viền <= 8px) theo ràng buộc vật lý 1–1 trên sơ đồ 136 ghế (Phòng 1, 2, 4) hoặc 132 ghế (Phòng 3).",
+        bold_prefix="Chiếu điểm neo phối cảnh 78% và ánh xạ đa giác ghế (Point-in-Polygon):"
+    )
+    add_bullet(
+        " Đối chiếu tập ghế có người ngồi thực tế (B) với tập ghế đã soát vé hợp lệ (A) để xác định khách ngồi không vé / sai ghế (B \\ A), khách vắng mặt (A \\ B) và cảnh báo vượt tải (|B| > |A|); lưu nhật ký kiểm toán ai_inference_logs và phát cảnh báo tức thời.",
+        bold_prefix="Đối soát đại số tập hợp và tự động phát cảnh báo:"
+    )
 
-    # --------------------------
+    # 2.3. Yêu cầu phi chức năng
     add_h2("2.3. Yêu cầu phi chức năng")
-    add_p("Các yêu cầu phi chức năng nhằm bảo đảm tính tin cậy, an toàn, hiệu năng và khả năng mở rộng của hệ thống được quy định chi tiết trong Bảng 2.1:")
-
-    # Table 2.1
     t1_data = [
-        ["Loại yêu cầu", "Mô tả chi tiết"],
-        ["Hiệu năng\n(Performance)", "- Thời gian thực thi mô hình AI (Inference time) của YOLOv8n trên ảnh Full HD (1920x1080) đạt ~15-25ms trên GPU và < 300ms trên CPU.\n- Thời gian xử lý API toàn trình /api/v1/analyze (từ khi nhận ảnh, chạy AI, ánh xạ đa giác 136 ghế, đối soát DB và lưu cảnh báo) đạt trung bình < 1.5 giây.\n- Tốc độ giải mã và phản hồi quét vé QR trên ứng dụng Mobile đạt < 100ms (kiểm tra cục bộ tức thì).\n- Hệ thống máy chủ đáp ứng xử lý đồng thời 50-100 phiên đồng bộ vé từ các thiết bị di động mà không gây nghẽn hàng đợi."],
-        ["Bảo mật\n(Security)", "- Cơ sở dữ liệu SQLite quản lý tập trung với ràng buộc toàn vẹn khóa chính và khóa ngoại nghiêm ngặt giữa các bảng: nhân viên, phòng chiếu, suất chiếu, vé, cảnh báo và sự cố.\n- Áp dụng cơ chế chống gian lận soát vé (Anti-passback): mỗi mã vé là duy nhất cho từng suất chiếu và bị khóa ngay sau lần quét thành công đầu tiên.\n- Dữ liệu vé lưu tạm trên thiết bị di động được lưu trữ an toàn trong các hộp dữ liệu cô lập của Hive Box."],
-        ["Khả dụng\n(Availability &\nOffline-First)", "- Tính khả dụng cao với kiến trúc Offline-First: Ứng dụng di động tiếp tục cho phép nhân viên quét vé và kiểm tra vé bình thường ngay cả khi mất sóng Wi-Fi/4G; dữ liệu sẽ tự động đẩy lên máy chủ ngay khi có mạng trở lại.\n- Giao diện Web Admin tương thích chuẩn trên các trình duyệt máy tính phòng điều hành; ứng dụng di động hiển thị trực quan, mượt mà trên hệ điều hành Android."],
-        ["Độ chính xác\n(Accuracy)", "- Mô hình YOLOv8n nhận diện đầu người đạt độ chính xác phát hiện mAP@0.5 đạt trên 85% trong môi trường ánh sáng thực tế của phòng chiếu phim.\n- Thuật toán ánh xạ điểm trong đa giác (Ray Casting Point-in-Polygon) đảm bảo độ chính xác tuyệt đối (100%) về mặt toán học khi xác định tọa độ tâm rơi vào biên ghế."],
-        ["Khả năng mở rộng\n(Scalability)", "- Kiến trúc hệ thống phân tách độc lập giữa Tầng trí tuệ nhân tạo (FastAPI AI Service), Tầng điều hành quản trị (React Vite Web Admin), và Tầng nghiệp vụ hiện trường (Flutter Mobile App).\n- Dễ dàng mở rộng cấu hình sơ đồ ghế cho các phòng chiếu mới (Phòng 1, Phòng 2, Phòng 3...) thông qua việc nạp tệp tọa độ đa giác JSON độc lập mà không cần thay đổi logic mã nguồn cốt lõi."]
+        ["Loại yêu cầu", "Mô tả"],
+        [
+            "Hiệu năng",
+            "Thời gian phản hồi toàn trình API phân tích AI (/api/v1/analyze) đạt trung bình < 1.5 giây (nhanh hơn ngưỡng yêu cầu < 3 giây); thời gian suy luận YOLOv8n đạt ~15–25ms trên GPU và < 300ms trên CPU; tốc độ giải mã mã QR cục bộ trên Mobile < 100ms; hỗ trợ 50–100 thiết bị đồng bộ đồng thời."
+        ],
+        [
+            "Bảo mật",
+            "Mã hóa mật khẩu một chiều bằng thuật toán PBKDF2-HMAC-SHA256 (100.000 vòng lặp kèm Salt ngẫu nhiên), xác thực phiên bằng chữ ký số HMAC-SHA256 Bearer Token, phân quyền RBAC (Quản lý / Soát vé, chặn Staff vào Web Admin với mã 403 Forbidden), khóa mềm nhân sự (is_active = 0) và chống quay vòng vé (Anti-passback)."
+        ],
+        [
+            "Khả dụng",
+            "Uptime đạt 99% nhờ kiến trúc Offline-First trên Mobile App (lưu trữ cô lập trong Hive Box khi mất mạng, tự động đồng bộ khi có mạng) và cơ chế SQLite WAL (Write-Ahead Logging) chống khóa bảng khi đọc/ghi đồng thời; giao diện tương thích chuẩn trên Mobile/Tablet/Desktop."
+        ],
+        [
+            "Độ chính xác",
+            "Mô hình YOLOv8n huấn luyện chuyên biệt trên ảnh CCTV phòng chiếu đạt mAP@0.5 > 88% (F1-Score 0.955); thuật toán chiếu điểm neo phối cảnh 78% kết hợp Point-in-Polygon và ràng buộc 1–1 loại bỏ triệt để hiện tượng lệch thị sai giữa các hàng ghế."
+        ],
+        [
+            "Khả năng mở rộng",
+            "Kiến trúc module hóa 3 tầng độc lập (FastAPI AI Service, React Vite Web Admin, Flutter Mobile App); dễ dàng mở rộng thêm tính năng mới hoặc thêm phòng chiếu mới chỉ bằng cách nạp tệp cấu hình đa giác ghế JSON (seats_config_roomX.json)."
+        ]
     ]
     t1 = doc.add_table(rows=len(t1_data), cols=2)
     for r_idx, r_data in enumerate(t1_data):
         for c_idx, val in enumerate(r_data):
             t1.rows[r_idx].cells[c_idx].paragraphs[0].text = val
-    format_table(t1, [2.0, 4.6], align_cols=[WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.JUSTIFY])
+    format_table(t1, [1.8, 4.8], align_cols=[WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.JUSTIFY])
+    add_p("Bảng 2.1. Yêu cầu phi chức năng", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
 
-    add_p("Bảng 2.1. Yêu cầu phi chức năng của hệ thống CineSight", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=12)
-
-    # --------------------------
+    # 2.4. Product Backlog
     add_h2("2.4. Product Backlog")
-    add_p("Danh sách các hạng mục yêu cầu (User Stories) của hệ thống CineSight được tổng hợp, phân loại theo mức độ ưu tiên (MoSCoW) và quản lý theo tiến độ các Sprint:")
-
+    add_p("Danh sách các User Stories của hệ thống CineSight được sắp xếp theo độ ưu tiên (MoSCoW) và phân bổ thực hiện qua các Sprint:")
     t2_data = [
         ["ID", "User Story", "Priority", "Points", "Sprint", "Status"],
-        ["US01", "Là Nhân viên, tôi muốn đăng nhập vào ứng dụng mobile bằng tài khoản được cấp để xác định danh tính và ca làm việc.", "Must", "3", "Sprint 1", "Done"],
-        ["US02", "Là Nhân viên, tôi muốn chọn phòng chiếu và suất chiếu hiện tại để bắt đầu quy trình soát vé tại cửa phòng.", "Must", "2", "Sprint 1", "Done"],
-        ["US03", "Là Nhân viên, tôi muốn quét mã QR trên vé để kiểm tra tính hợp lệ (đúng phòng, đúng suất chiếu, chưa bị quét trùng).", "Must", "5", "Sprint 1", "Done"],
-        ["US04", "Là Nhân viên, tôi muốn ứng dụng tự động lưu trữ vé vào bộ nhớ nội bộ (Hive) khi mất mạng và tự động đồng bộ lên máy chủ khi có kết nối trở lại.", "Must", "5", "Sprint 2", "Done"],
-        ["US05", "Là Quản trị viên, tôi muốn xem bảng điều khiển (Dashboard) thống kê tổng quan số vé đã soát, tỷ lệ lấp đầy ghế và số lượng cảnh báo vi phạm.", "Must", "3", "Sprint 2", "Done"],
-        ["US06", "Là Quản trị viên, tôi muốn quản lý thông tin các phòng chiếu, xem sơ đồ ghế 2D và quản lý lịch các suất chiếu.", "Must", "5", "Sprint 2", "Done"],
-        ["US07", "Là Quản trị viên, tôi muốn quản lý thông tin nhân viên soát vé (CRUD) và phân chia ca trực, phòng phụ trách.", "Must", "3", "Sprint 2", "Done"],
-        ["US08", "Là Quản trị viên, tôi muốn tải ảnh camera phòng chiếu và bấm nút \"Chạy AI\" để kích hoạt phân tích đối soát trực tiếp từ Web Admin.", "Must", "5", "Sprint 3", "Done"],
-        ["US09", "Là Hệ thống AI, tôi muốn nhận diện vị trí đầu người trong phòng chiếu bằng mô hình YOLOv8n trên ảnh snapshot camera.", "Must", "8", "Sprint 3", "Done"],
-        ["US10", "Là Hệ thống AI, tôi muốn ánh xạ tọa độ đầu người vào ma trận đa giác ghế và tự động đối soát logic tập hợp với danh sách vé đã quét để phát hiện khách lậu, vắng khách.", "Must", "8", "Sprint 3", "Done"],
-        ["US11", "Là Quản trị viên, tôi muốn xem danh sách cảnh báo vi phạm chi tiết trên Web Admin và đánh dấu xác nhận đã xử lý.", "Must", "3", "Sprint 4", "Done"],
-        ["US12", "Là Nhân viên, tôi muốn nhận thông báo cảnh báo tức thời trên điện thoại khi phát hiện có khách ngồi sai ghế/ngồi không vé tại phòng chiếu mình phụ trách.", "Must", "3", "Sprint 4", "Done"],
-        ["US13", "Là Nhân viên, tôi muốn gửi báo cáo sự cố cơ sở vật chất (ghế hỏng, điều hòa, vệ sinh) kèm vị trí cụ thể lên hệ thống.", "Should", "3", "Sprint 4", "Done"],
-        ["US14", "Là Quản trị viên, tôi muốn theo dõi danh sách và cập nhật trạng thái khắc phục các sự cố rạp do nhân viên báo cáo.", "Should", "2", "Sprint 4", "Done"],
-        ["US15", "Là Nhân viên, tôi muốn thực hiện thao tác bàn giao ca làm việc để tổng kết số lượng vé và sự cố cho ca tiếp theo.", "Should", "2", "Sprint 4", "Done"]
+        ["US01", "Là người dùng (nhân viên/quản lý), tôi muốn đăng nhập và được hệ thống tự động nhận diện ca trực theo giờ đăng nhập thực tế", "Must", "3", "1", "Done"],
+        ["US02", "Là nhân viên, tôi muốn chọn phòng chiếu và suất chiếu linh hoạt để thực hiện soát vé tại cửa rạp", "Must", "2", "1", "Done"],
+        ["US03", "Là nhân viên, tôi muốn quét mã QR trên vé để kiểm tra hợp lệ và chống quét trùng vé (Anti-passback)", "Must", "5", "1", "Done"],
+        ["US04", "Là nhân viên, tôi muốn ứng dụng lưu vé vào Hive Box khi mất mạng và tự động đồng bộ lên máy chủ khi có mạng", "Must", "5", "1", "Done"],
+        ["US05", "Là admin, tôi muốn quản lý người dùng (CRUD nhân sự), theo dõi ca trực động/trạng thái online và khóa mềm tài khoản", "Must", "5", "2", "Done"],
+        ["US06", "Là admin, tôi muốn đồng bộ danh mục phim từ TMDB và lập lịch chiếu tự động chống chồng lấn khung giờ", "Must", "5", "2", "Done"],
+        ["US07", "Là admin, tôi muốn quản lý 4 phòng chiếu (136 ghế Phòng 1, 2, 4 và 132 ghế Phòng 3) và xem thống kê trên Dashboard SOC", "Must", "3", "2", "Done"],
+        ["US08", "Là hệ thống AI, tôi muốn nhận diện đầu người bằng YOLOv8n và chiếu điểm neo 78% vào đa giác ghế theo ràng buộc 1–1", "Must", "8", "3", "Done"],
+        ["US09", "Là hệ thống AI, tôi muốn tự động quét định kỳ 3 mốc mỗi suất chiếu và đối soát tập hợp (B \\ A, A \\ B) để sinh cảnh báo", "Must", "8", "3", "Done"],
+        ["US10", "Là admin/nhân viên, tôi muốn xem cảnh báo gom nhóm theo phòng chiếu và xử lý nhanh toàn bộ phòng chỉ với 1 chạm", "Must", "5", "4", "Done"],
+        ["US11", "Là nhân viên, tôi muốn gửi báo cáo sự cố kèm ảnh chụp thực tế và tự động ẩn/xóa nhanh các sự cố đã xử lý sau 1 giờ", "Should", "3", "4", "Done"],
+        ["US12", "Là nhân viên, tôi muốn tổng kết số lượng vé đã soát, số sự cố phát sinh và xác nhận bàn giao ca trực", "Should", "2", "4", "Done"],
     ]
     t2 = doc.add_table(rows=len(t2_data), cols=6)
     for r_idx, r_data in enumerate(t2_data):
         for c_idx, val in enumerate(r_data):
             t2.rows[r_idx].cells[c_idx].paragraphs[0].text = val
-    format_table(t2, [0.7, 3.2, 0.7, 0.6, 0.8, 0.6], 
-                 align_cols=[WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.JUSTIFY, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.CENTER])
+    format_table(
+        t2, [0.65, 3.45, 0.7, 0.6, 0.6, 0.6],
+        align_cols=[
+            WD_ALIGN_PARAGRAPH.CENTER,
+            WD_ALIGN_PARAGRAPH.JUSTIFY,
+            WD_ALIGN_PARAGRAPH.CENTER,
+            WD_ALIGN_PARAGRAPH.CENTER,
+            WD_ALIGN_PARAGRAPH.CENTER,
+            WD_ALIGN_PARAGRAPH.CENTER
+        ]
+    )
+    add_p("Bảng 2.2. Product Backlog (trích)", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
 
-    add_p("Bảng 2.2. Product Backlog hệ thống CineSight", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=12)
-
-    # --------------------------
+    # 2.5. Use Case Diagram
     add_h2("2.5. Use Case Diagram")
-    add_p("Hệ thống bao gồm 3 tác nhân (Actor) chính tham gia vào quy trình vận hành:")
-    add_bullet(" Tương tác thông qua ứng dụng Web Admin để quản trị hệ thống, giám sát vận hành rạp và xử lý các sự cố.", bold_prefix="1. Quản trị viên (Admin):")
-    add_bullet(" Tương tác thông qua ứng dụng di động Flutter để thực hiện kiểm soát vé tại cửa phòng chiếu và nhận cảnh báo tức thời.", bold_prefix="2. Nhân viên soát vé (Staff / User):")
-    add_bullet(" Đóng vai trò tác nhân hệ thống tự động, thực hiện phân tích thị giác máy tính và thuật toán đối soát hình học trên máy chủ backend.", bold_prefix="3. Hệ thống AI / Camera (System Actor):")
-
-    add_p("Sơ đồ Use Case tổng quan của toàn bộ hệ thống CineSight được mô tả trực quan trong Hình 2.1 dưới đây:")
-
-    # Add Figure 2.1 image
+    add_p(
+        "Sơ đồ Use Case tổng quan của hệ thống CineSight mô tả sự tương tác giữa 3 tác nhân chính: Nhân viên soát vé (User / Staff - Mobile App), Quản trị viên (Admin - Web Admin) và Hệ thống AI / Camera (System Actor) với 9 Use Case nghiệp vụ cốt lõi và các Use Case phụ thuộc («include», «extend»):"
+    )
     if os.path.exists(DIAGRAM_PATH):
         p_img = doc.add_paragraph()
         p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_img.paragraph_format.space_before = Pt(8)
+        p_img.paragraph_format.space_before = Pt(6)
         p_img.paragraph_format.space_after = Pt(4)
         run_img = p_img.add_run()
-        run_img.add_picture(DIAGRAM_PATH, width=Inches(6.4))
-        add_p("Hình 2.1. Use Case Diagram tổng quan hệ thống CineSight", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=12)
+        run_img.add_picture(DIAGRAM_PATH, width=Inches(6.5))
+        add_p("Hình 2.1. Use Case Diagram tổng quan hệ thống", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
 
-    # --------------------------
+    # 2.6. Đặc tả Use Case
     add_h2("2.6. Đặc tả Use Case")
-    add_p("Phần này trình bày chi tiết đặc tả của 6 Use Case cốt lõi nhất cấu thành quy trình nghiệp vụ kiểm soát và đối soát của hệ thống CineSight theo chuẩn mẫu cấu trúc học thuật.")
+    add_p("Phần dưới đây trình bày đặc tả chi tiết 7 Use Case chính của hệ thống CineSight:")
 
-    def add_usecase_table(title, rows_spec):
-        add_h3(title)
+    def add_usecase_table(heading_text, caption_text, rows_spec):
+        add_h3(heading_text)
         tbl = doc.add_table(rows=len(rows_spec), cols=2)
         for r_idx, (attr, content) in enumerate(rows_spec):
-            c0 = tbl.rows[r_idx].cells[0]
-            c1 = tbl.rows[r_idx].cells[1]
-            c0.paragraphs[0].text = attr
-            c1.paragraphs[0].text = content
-        
-        # Format table
-        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-        for r_idx, row in enumerate(tbl.rows):
-            cell0 = row.cells[0]
-            cell1 = row.cells[1]
-            cell0.width = Inches(1.8)
-            cell1.width = Inches(4.8)
-            cell0.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-            cell1.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-            set_cell_borders(cell0, color="B0B0B0", sz="4")
-            set_cell_borders(cell1, color="B0B0B0", sz="4")
-            set_cell_margins(cell0, top=90, bottom=90, left=130, right=130)
-            set_cell_margins(cell1, top=90, bottom=90, left=130, right=130)
+            tbl.rows[r_idx].cells[0].paragraphs[0].text = attr
+            tbl.rows[r_idx].cells[1].paragraphs[0].text = content
 
-            # Left column formatting (Header-like attribute)
-            set_cell_background(cell0, "F1F5F9")
-            p0 = cell0.paragraphs[0]
+        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for row in tbl.rows:
+            c0, c1 = row.cells[0], row.cells[1]
+            c0.width = Inches(1.65)
+            c1.width = Inches(4.95)
+            c0.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            c1.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            set_cell_borders(c0, color="808080", sz="4")
+            set_cell_borders(c1, color="808080", sz="4")
+            set_cell_margins(c0, top=85, bottom=85, left=120, right=120)
+            set_cell_margins(c1, top=85, bottom=85, left=120, right=120)
+
+            set_cell_background(c0, "F2F4F8")
+            p0 = c0.paragraphs[0]
             p0.alignment = WD_ALIGN_PARAGRAPH.LEFT
             p0.paragraph_format.space_after = Pt(0)
             p0.paragraph_format.line_spacing = 1.15
@@ -428,8 +680,7 @@ def build_docx():
                 r.font.name = "Times New Roman"
                 r.font.size = Pt(12)
 
-            # Right column formatting
-            p1 = cell1.paragraphs[0]
+            p1 = c1.paragraphs[0]
             p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             p1.paragraph_format.space_after = Pt(0)
             p1.paragraph_format.line_spacing = 1.15
@@ -437,82 +688,116 @@ def build_docx():
                 r.font.name = "Times New Roman"
                 r.font.size = Pt(12)
 
-    # UC01
-    add_usecase_table("2.6.1. Use Case UC01: Đăng nhập hệ thống", [
-        ("Tên Use Case", "UC01 - Đăng nhập hệ thống"),
-        ("Actor", "Nhân viên soát vé (Mobile App), Quản trị viên (Web Admin)"),
-        ("Mô tả", "Xác thực danh tính của người dùng để cấp quyền truy cập vào các chức năng tương ứng của hệ thống."),
-        ("Tiền điều kiện", "Người dùng đã được cấp tài khoản hợp lệ trong cơ sở dữ liệu hệ thống."),
-        ("Luồng sự kiện chính", "1. Người dùng mở ứng dụng và nhập Tên đăng nhập (username) và Mật khẩu (password).\n2. Người dùng nhấn nút \"Đăng nhập\".\n3. Ứng dụng gửi yêu cầu xác thực đến máy chủ qua API POST /api/v1/login.\n4. Máy chủ kiểm tra thông tin trong bảng employees.\n5. Máy chủ xác thực thành công và trả về thông tin nhân viên, vai trò (role), ca làm việc (shift) và phòng phụ trách.\n6. Ứng dụng lưu phiên làm việc và chuyển hướng người dùng đến màn hình chính (Dashboard/Home)."),
-        ("Luồng ngoại lệ", "3a. Thiếu thông tin đầu vào: Người dùng để trống tên đăng nhập hoặc mật khẩu → Ứng dụng hiển thị cảnh báo \"Vui lòng nhập đầy đủ thông tin\".\n4a. Sai tài khoản hoặc mật khẩu: Máy chủ kiểm tra không khớp → Trả về mã lỗi 401 Unauthorized → Ứng dụng hiển thị thông báo \"Tài khoản hoặc mật khẩu không chính xác\".\n4b. Mất kết nối máy chủ: Không thể kết nối tới backend → Ứng dụng hiển thị thông báo \"Lỗi kết nối máy chủ, vui lòng kiểm tra mạng\"."),
-        ("Hậu điều kiện", "Người dùng đăng nhập thành công và truy cập đúng phân quyền của mình.")
-    ])
-    add_p("Bảng 2.3. Đặc tả Use Case Đăng nhập hệ thống", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
+        add_p(caption_text, italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
 
-    # UC02
-    add_usecase_table("2.6.2. Use Case UC02: Quét mã QR soát vé", [
-        ("Tên Use Case", "UC02 - Quét mã QR soát vé"),
-        ("Actor", "Nhân viên soát vé"),
-        ("Mô tả", "Nhân viên sử dụng camera trên ứng dụng di động để quét mã QR vé xem phim của khách tại cửa phòng chiếu, kiểm tra tính hợp lệ và ghi nhận trạng thái đã soát."),
-        ("Tiền điều kiện", "Nhân viên đã đăng nhập thành công và đã chọn đúng Phòng chiếu, Suất chiếu hiện tại trên ứng dụng."),
-        ("Luồng sự kiện chính", "1. Nhân viên mở màn hình Quét vé (Scanner Screen).\n2. Hướng camera thiết bị vào mã QR trên vé của khán giả.\n3. Ứng dụng tự động nhận diện, trích xuất chuỗi mã hóa và phân tích thông tin vé (Mã vé, Phòng chiếu, Suất chiếu, Số ghế).\n4. Ứng dụng kiểm tra tính hợp lệ: đối chiếu phòng chiếu và khung giờ suất chiếu đang chọn.\n5. Ứng dụng kiểm tra trùng lặp trong cơ sở dữ liệu ngoại tuyến (Hive Box): xác nhận vé chưa từng được quét.\n6. Ứng dụng phát âm thanh xác nhận thành công, hiển thị thông báo \"VÉ HỢP LỆ\" (màu xanh lá) kèm số ghế, đồng thời lưu bản ghi vé vào bộ nhớ thiết bị."),
-        ("Luồng ngoại lệ", "3a. Mã QR không đúng định dạng: Ứng dụng báo lỗi \"Mã vé không hợp lệ\".\n4a. Vé sai phòng chiếu: Phòng trên vé khác phòng đang chọn → Báo lỗi màu đỏ \"SAI PHÒNG CHIẾU\" kèm thông tin phòng đúng của vé.\n4b. Vé sai suất chiếu: Giờ chiếu trên vé không khớp với suất chiếu đang diễn ra → Báo lỗi \"SAI SUẤT CHIẾU\".\n5a. Vé bị quét trùng (Anti-passback): Mã vé đã tồn tại trong danh sách vé đã quét → Phát chuông cảnh báo vi phạm, hiện thông báo đỏ \"CẢNH BÁO: VÉ ĐÃ ĐƯỢC QUÉT TRƯỚC ĐÓ\"."),
-        ("Hậu điều kiện", "Vé hợp lệ được ghi nhận trạng thái \"Đã quét\" trong hệ thống và sẵn sàng để đồng bộ lên máy chủ.")
-    ])
-    add_p("Bảng 2.4. Đặc tả Use Case Quét mã QR soát vé", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
+    # 2.6.1. UC01
+    add_usecase_table(
+        "2.6.1. Use Case: Đăng nhập",
+        "Bảng 2.3. Đặc tả Use Case Đăng nhập",
+        [
+            ("Tên Use Case", "UC01 - Đăng nhập và nhận diện ca trực tự động"),
+            ("Actor", "User (Nhân viên soát vé), Admin (Quản trị viên)"),
+            ("Mô tả", "Cho phép người dùng đăng nhập vào hệ thống (Mobile App hoặc Web Admin), kiểm tra phân quyền RBAC và tự động xác định ca làm việc dựa trên thời điểm đăng nhập thực tế."),
+            ("Tiền điều kiện", "Người dùng đã có tài khoản hợp lệ trong bảng employees và trạng thái tài khoản đang hoạt động (is_active = 1)."),
+            ("Luồng chính", "1. Người dùng nhập username và password trên màn hình đăng nhập.\n2. Hệ thống gửi yêu cầu xác thực tới API POST /api/v1/login (hoặc /api/v1/auth/login).\n3. Máy chủ kiểm tra tài khoản và đối chiếu mật khẩu băm PBKDF2-HMAC-SHA256.\n4. Hệ thống lấy giờ đăng nhập thực tế để tự động nhận diện ca làm việc (Nhân viên: 07:30–13:00 Ca sáng, 13:00–16:00 Ca chiều, 16:00–23:00 Ca tối; Quản lý: 07:30–16:00 Ca sáng, 16:30–24:00 Ca tối).\n5. Máy chủ cập nhật trạng thái trực tuyến (last_seen_at), cấp HMAC-SHA256 Bearer Token và đăng nhập thành công."),
+            ("Luồng ngoại lệ", "1a. Để trống tên đăng nhập hoặc mật khẩu → Hiển thị cảnh báo yêu cầu nhập đầy đủ.\n3a. Sai thông tin hoặc tài khoản đã bị khóa mềm (is_active = 0) → Trả về lỗi 401 Unauthorized và hiển thị thông báo lỗi.\n3b. Tài khoản vai trò 'Soát vé' đăng nhập vào cổng Web Admin → Trả về lỗi 403 Forbidden và từ chối truy cập."),
+            ("Hậu điều kiện", "Người dùng được chuyển đến trang chủ, trạng thái ca trực trên hệ thống tự động chuyển từ 'Chưa có' sang ca làm việc tương ứng.")
+        ]
+    )
 
-    # UC03
-    add_usecase_table("2.6.3. Use Case UC03: Đồng bộ vé đã soát lên máy chủ", [
-        ("Tên Use Case", "UC03 - Đồng bộ vé đã soát lên máy chủ"),
-        ("Actor", "Nhân viên soát vé / Hệ thống Mobile App"),
-        ("Mô tả", "Tự động đồng bộ các bản ghi vé đã quét hợp lệ từ bộ nhớ ngoại tuyến của ứng dụng di động lên cơ sở dữ liệu máy chủ trung tâm."),
-        ("Tiền điều kiện", "Có ít nhất một vé hợp lệ đã được quét lưu trong Hive Box và thiết bị có kết nối mạng Internet."),
-        ("Luồng sự kiện chính", "1. Ngay sau khi quét thành công một vé (hoặc khi nhân viên bấm nút \"Đồng bộ vé\"), ứng dụng kích hoạt tiến trình đồng bộ ngầm.\n2. Ứng dụng đóng gói danh sách vé chưa đồng bộ thành mảng JSON.\n3. Ứng dụng gửi yêu cầu qua giao thức HTTP POST tới API /api/v1/sync_tickets.\n4. Máy chủ nhận payload, kiểm tra ràng buộc và ghi các vé hợp lệ vào bảng tickets trong cơ sở dữ liệu SQLite.\n5. Máy chủ trả về phản hồi mã 200 OK với thông báo đồng bộ thành công.\n6. Ứng dụng di động cập nhật cờ isSynced = true cho các vé tương ứng trong bộ nhớ Hive."),
-        ("Luồng ngoại lệ", "3a. Thiết bị mất kết nối mạng (Offline): Ứng dụng ghi nhận trạng thái chờ đồng bộ (isSynced = false), lưu trữ an toàn trong Hive và tự động thử lại khi phát hiện kết nối mạng được phục hồi.\n4a. Lỗi xung đột dữ liệu trên máy chủ: Máy chủ từ chối bản ghi trùng lặp và trả về danh sách các vé đã ghi nhận."),
-        ("Hậu điều kiện", "Dữ liệu vé trên máy chủ trung tâm được cập nhật đầy đủ, tạo cơ sở dữ liệu cho bước đối soát AI.")
-    ])
-    add_p("Bảng 2.5. Đặc tả Use Case Đồng bộ vé đã soát lên máy chủ", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
+    # 2.6.2. UC02
+    add_usecase_table(
+        "2.6.2. Use Case: Quản lý phim và lập lịch chiếu",
+        "Bảng 2.4. Đặc tả Use Case Quản lý phim và lập lịch chiếu",
+        [
+            ("Tên Use Case", "UC02 - Quản lý phim TMDB và lập lịch chiếu tự động"),
+            ("Actor", "Admin (Quản trị viên)"),
+            ("Mô tả", "Cho phép Quản trị viên đồng bộ danh mục phim thực tế từ TMDB và tạo mới hoặc tự động xếp lịch chiếu chống chồng lấn khung giờ cho 4 phòng chiếu."),
+            ("Tiền điều kiện", "Quản trị viên đã đăng nhập vào cổng Web Admin với quyền Quản lý."),
+            ("Luồng chính", "1. Quản trị viên truy cập phân hệ Quản lý Phim hoặc Lịch chiếu trên Web Admin.\n2. Quản trị viên thêm phim mới hoặc đồng bộ danh sách phim từ gói dữ liệu TMDB vào bảng movies.\n3. Quản trị viên chọn tạo suất chiếu thủ công (POST /api/v1/showtimes) hoặc kích hoạt trình lập lịch tự động (POST /api/v1/showtimes/generate).\n4. Hệ thống tự động tính khung giờ kết thúc dựa trên thời lượng phim + 15 phút nghỉ dọn vệ sinh và kiểm tra chống trùng phòng/trùng giờ.\n5. Lưu danh sách suất chiếu hợp lệ vào bảng showtimes và cập nhật lên giao diện."),
+            ("Luồng ngoại lệ", "4a. Khung giờ suất chiếu mới bị giao cắt với suất chiếu đã tồn tại của cùng phòng chiếu → Hệ thống từ chối và báo lỗi xung đột lịch chiếu."),
+            ("Hậu điều kiện", "Danh mục phim và lịch chiếu 4 phòng được cập nhật đồng bộ trên toàn hệ thống.")
+        ]
+    )
 
-    # UC04
-    add_usecase_table("2.6.4. Use Case UC04: Phân tích ảnh camera và đối soát ghế tự động", [
-        ("Tên Use Case", "UC04 - Phân tích ảnh camera và đối soát ghế tự động"),
-        ("Actor", "Hệ thống AI / Quản trị viên (Admin)"),
-        ("Mô tả", "Phân tích ảnh chụp snapshot camera phòng chiếu bằng mô hình thị giác máy tính, xác định vị trí khán giả ngồi thực tế và đối soát logic tập hợp với danh sách vé đã soát tại cổng."),
-        ("Tiền điều kiện", "Suất chiếu đã bắt đầu (khoảng 10-15 phút sau giờ chiếu), phòng chiếu đã có tệp cấu hình tọa độ ghế đa giác (seats_config_roomX.json) và đã nhận dữ liệu vé đã đồng bộ."),
-        ("Luồng sự kiện chính", "1. Quản trị viên chọn phòng chiếu trên Web Admin, tải ảnh chụp snapshot từ camera CCTV và nhấn nút \"⚡ Chạy AI\" (hoặc hệ thống định thời tự động kích hoạt).\n2. Hệ thống gửi ảnh tới API POST /api/v1/analyze kèm theo room_id và showtime_id.\n3. Mô hình YOLOv8n nhận diện toàn bộ các vị trí đầu người trong khung hình, trích xuất danh sách tọa độ tâm (x, y).\n4. Thuật toán Ray Casting đối chiếu từng tọa độ tâm với danh sách các đa giác ghế trong tệp cấu hình để xác định danh sách các ghế có người ngồi thực tế (Tập B).\n5. Hệ thống truy vấn cơ sở dữ liệu SQLite lấy danh sách các ghế đã soát vé hợp lệ cho suất chiếu đó (Tập A).\n6. Hệ thống thực hiện phép trừ đại số tập hợp:\n   - Xác định ghế ngồi không vé / khách lậu: B \\ A.\n   - Xác định ghế đã soát vé nhưng không có người ngồi: A \\ B.\n7. Hệ thống tự động lưu bản ghi phân tích và sinh cảnh báo vào bảng alerts.\n8. Trả về kết quả phân tích trực quan lên giao diện Web Admin."),
-        ("Luồng ngoại lệ", "2a. Không tìm thấy tệp cấu hình đa giác ghế: Máy chủ trả về mã lỗi 404 \"Không tìm thấy cấu hình ghế cho phòng chiếu\".\n3a. Ảnh chụp bị mờ hoặc quá tối không nhận diện được: Mô hình trả về 0 người → Hệ thống cảnh báo chất lượng ảnh camera không đạt yêu cầu."),
-        ("Hậu điều kiện", "Kết quả đối soát và các cảnh báo vi phạm được lưu trữ đầy đủ trong cơ sở dữ liệu hệ thống.")
-    ])
-    add_p("Bảng 2.6. Đặc tả Use Case Phân tích ảnh camera và đối soát ghế tự động", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
+    # 2.6.3. UC03
+    add_usecase_table(
+        "2.6.3. Use Case: Quét mã QR soát vé",
+        "Bảng 2.5. Đặc tả Use Case Quét mã QR soát vé",
+        [
+            ("Tên Use Case", "UC03 - Quét mã QR soát vé tại cửa phòng chiếu"),
+            ("Actor", "User (Nhân viên soát vé)"),
+            ("Mô tả", "Nhân viên dùng camera trên ứng dụng di động quét mã QR trên vé của khách, kiểm tra tính hợp lệ và ngăn chặn vé quét trùng (Anti-passback)."),
+            ("Tiền điều kiện", "Nhân viên đã đăng nhập Mobile App và chọn Phòng chiếu, Suất chiếu đang mở cửa đón khách."),
+            ("Luồng chính", "1. Nhân viên mở màn hình Quét vé (Scanner) và hướng camera vào mã QR trên vé.\n2. Ứng dụng giải mã chuỗi thông tin vé (Mã vé, Phòng chiếu, Suất chiếu, Mã ghế, Hạng ghế).\n3. Ứng dụng kiểm tra đối chiếu đúng Phòng chiếu và đúng Suất chiếu đang chọn.\n4. Ứng dụng kiểm tra trong bộ nhớ cục bộ (Hive Box) và dữ liệu đồng bộ để xác nhận vé chưa từng được quét.\n5. Phát âm thanh xác nhận hợp lệ, hiển thị thông báo xanh 'VÉ HỢP LỆ' kèm số ghế và lưu vé vào Hive Box."),
+            ("Luồng ngoại lệ", "2a. Mã QR sai định dạng → Hiển thị lỗi 'Mã vé không hợp lệ'.\n3a. Vé thuộc phòng khác hoặc suất chiếu khác → Báo lỗi đỏ 'SAI PHÒNG CHIẾU / SAI SUẤT CHIẾU'.\n4a. Vé đã từng được quét trước đó (Anti-passback) → Phát còi cảnh báo và hiện thông báo đỏ 'VÉ ĐÃ ĐƯỢC SỬ DỤNG TRƯỚC ĐÓ'."),
+            ("Hậu điều kiện", "Vé hợp lệ được ghi nhận trạng thái đã soát (scanned) và chờ đồng bộ lên máy chủ.")
+        ]
+    )
 
-    # UC05
-    add_usecase_table("2.6.5. Use Case UC05: Tiếp nhận và xử lý cảnh báo vi phạm", [
-        ("Tên Use Case", "UC05 - Tiếp nhận và xử lý cảnh báo vi phạm"),
-        ("Actor", "Quản trị viên (Admin), Nhân viên soát vé (Staff)"),
-        ("Mô tả", "Tiếp nhận các cảnh báo lệch lượng khách do hệ thống AI sinh ra, kiểm tra thực tế và cập nhật trạng thái xử lý vi phạm."),
-        ("Tiền điều kiện", "Hệ thống AI đã thực hiện xong tiến trình phân tích UC04 và ghi nhận có chênh lệch ghế vi phạm."),
-        ("Luồng sự kiện chính", "1. Hệ thống phát tín hiệu cảnh báo: Web Admin hiển thị thẻ cảnh báo nổi bật trên Dashboard/Alerts; ứng dụng di động của nhân viên phụ trách phòng chiếu nhận thông báo âm thanh rung.\n2. Quản trị viên hoặc Nhân viên mở xem chi tiết cảnh báo: phòng chiếu, suất chiếu, loại vi phạm (ngồi lậu B \\ A, vắng khách A \\ B), danh sách mã ghế cụ thể.\n3. Nhân viên trực tiếp vào phòng chiếu kiểm tra vị trí ghế vi phạm được chỉ định.\n4. Sau khi nhắc nhở khán giả về đúng ghế hoặc mời khách mua bổ sung vé, người dùng nhấn nút \"Đánh dấu đã xử lý\" trên Web Admin (gọi API POST /api/v1/resolve_alert/{alert_id}).\n5. Máy chủ cập nhật trường resolved = 1 trong cơ sở dữ liệu.\n6. Giao diện chuyển trạng thái cảnh báo sang màu xanh \"Đã xử lý\"."),
-        ("Luồng ngoại lệ", "4a. Lỗi kết nối mạng khi xác nhận: Không thể gọi API cập nhật → Hệ thống hiển thị thông báo lỗi \"Cập nhật trạng thái thất bại, vui lòng thử lại\"."),
-        ("Hậu điều kiện", "Bản ghi cảnh báo được chuyển sang trạng thái đã xử lý hoàn tất, dữ liệu báo cáo SOC được cập nhật tức thời.")
-    ])
-    add_p("Bảng 2.7. Đặc tả Use Case Tiếp nhận và xử lý cảnh báo vi phạm", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
+    # 2.6.4. UC04
+    add_usecase_table(
+        "2.6.4. Use Case: Đồng bộ vé ngoại tuyến",
+        "Bảng 2.6. Đặc tả Use Case Đồng bộ vé ngoại tuyến",
+        [
+            ("Tên Use Case", "UC04 - Đồng bộ vé đã soát lên máy chủ (Offline-First Sync)"),
+            ("Actor", "User (Nhân viên soát vé), Hệ thống Mobile App"),
+            ("Mô tả", "Tự động đồng bộ danh sách vé đã quét lưu trong bộ nhớ cục bộ (Hive Box) của thiết bị di động lên cơ sở dữ liệu máy chủ trung tâm."),
+            ("Tiền điều kiện", "Có ít nhất một bản ghi vé chưa đồng bộ (isSynced = false) trong Hive Box và thiết bị có kết nối mạng."),
+            ("Luồng chính", "1. Ngay sau khi quét vé hoặc khi mạng phục hồi, ứng dụng kích hoạt tiến trình đồng bộ ngầm.\n2. Đóng gói danh sách vé chưa đồng bộ thành mảng JSON.\n3. Gửi yêu cầu tới API POST /api/v1/tickets/sync (hỗ trợ tương thích /api/v1/sync_tickets).\n4. Máy chủ kiểm tra ràng buộc UNIQUE(showtime_id, seat_label) và ghi nhận vào bảng tickets (chế độ SQLite WAL).\n5. Máy chủ trả về mã 200 OK; ứng dụng cập nhật cờ isSynced = true trong Hive Box."),
+            ("Luồng ngoại lệ", "3a. Mất kết nối mạng khi đang gửi → Giữ nguyên trạng thái isSynced = false trong Hive Box và tự động thử lại khi có mạng mà không làm gián đoạn việc quét vé."),
+            ("Hậu điều kiện", "Danh sách ghế đã soát vé hợp lệ (Tập A) trên máy chủ được cập nhật đầy đủ theo thời gian thực.")
+        ]
+    )
 
-    # UC06
-    add_usecase_table("2.6.6. Use Case UC06: Báo cáo và xử lý sự cố phòng chiếu", [
-        ("Tên Use Case", "UC06 - Báo cáo và xử lý sự cố phòng chiếu"),
-        ("Actor", "Nhân viên soát vé (Báo cáo), Quản trị viên (Tiếp nhận & Xử lý)"),
-        ("Mô tả", "Cho phép nhân viên gửi báo cáo về các hư hỏng cơ sở vật chất phát hiện trong phòng chiếu và quản trị viên quản lý tiến độ khắc phục."),
-        ("Tiền điều kiện", "Nhân viên đã đăng nhập vào ứng dụng di động; Quản trị viên đang truy cập trang Quản lý Sự cố trên Web Admin."),
-        ("Luồng sự kiện chính", "1. Nhân viên phát hiện cơ sở vật chất gặp vấn đề (ghế gãy, rách đệm, lỗi điều hòa, rác bẩn).\n2. Nhân viên vào mục \"Báo cáo sự cố\" trên Mobile App.\n3. Chọn phòng chiếu, chọn danh mục sự cố (Ghế hỏng, Vệ sinh, Thiết bị), nhập số ghế cụ thể và ghi chú mô tả.\n4. Nhân viên nhấn nút \"Gửi báo cáo\".\n5. Ứng dụng gửi dữ liệu qua API POST /api/v1/incidents lên máy chủ.\n6. Máy chủ lưu bản ghi sự cố vào bảng incidents với trạng thái ban đầu là \"Chờ xử lý\" (Pending).\n7. Web Admin nhận thông tin sự cố mới, Quản trị viên điều phối bộ phận kỹ thuật khắc phục.\n8. Sau khi khắc phục xong, Quản trị viên nhấn nút \"Xác nhận đã khắc phục\" (gọi API POST /api/v1/incidents/{incident_id}/resolve).\n9. Hệ thống chuyển trạng thái sự cố sang \"Đã khắc phục\" (Resolved)."),
-        ("Luồng ngoại lệ", "4a. Thiếu trường thông tin bắt buộc: Nhân viên chưa nhập vị trí hoặc mô tả → Ứng dụng nhắc nhở \"Vui lòng nhập đầy đủ thông tin sự cố\".\n5a. Mất kết nối khi gửi: Báo lỗi kết nối mạng và yêu cầu gửi lại khi có mạng."),
-        ("Hậu điều kiện", "Sự cố được ghi nhận và theo dõi xuyên suốt vòng đời từ khi phát hiện đến khi được khắc phục triệt để.")
-    ])
-    add_p("Bảng 2.8. Đặc tả Use Case Báo cáo và xử lý sự cố phòng chiếu", italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
+    # 2.6.5. UC05
+    add_usecase_table(
+        "2.6.5. Use Case: Phân tích ảnh camera và đối soát ghế AI",
+        "Bảng 2.7. Đặc tả Use Case Phân tích ảnh camera và đối soát ghế AI",
+        [
+            ("Tên Use Case", "UC05 - Phân tích ảnh camera và đối soát ghế AI tự động"),
+            ("Actor", "Hệ thống AI / Camera, Admin (Quản trị viên)"),
+            ("Mô tả", "Nhận diện đầu người bằng YOLOv8n, chiếu điểm neo phối cảnh 78% vào ma trận đa giác ghế (136 ghế Phòng 1, 2, 4 hoặc 132 ghế Phòng 3) và đối soát tập hợp với dữ liệu vé đã soát."),
+            ("Tiền điều kiện", "Phòng chiếu đã có tệp cấu hình đa giác ghế (seats_config_roomX.json) và suất chiếu đang diễn ra."),
+            ("Luồng chính", "1. Hệ thống tự động kích hoạt ở 3 mốc thời gian mỗi suất chiếu (Đầu giờ, Giữa giờ, Cuối giờ) hoặc Admin nhấn nút 'Chạy AI' gọi API POST /api/v1/analyze.\n2. Mô hình YOLOv8n nhận diện các khung bao đầu người và lọc khử trùng khoảng cách phối cảnh.\n3. Tính điểm neo phối cảnh tại 78% chiều cao khung bao (y_anchor = y1 + 0.78*(y2 - y1)) và dò đa giác 3 bước (cv2.pointPolygonTest + dung sai <= 8px) theo ràng buộc 1–1 để xác định tập ghế có người ngồi thực tế (Tập B).\n4. Truy vấn bảng tickets lấy tập ghế đã soát vé hợp lệ (Tập A).\n5. Tính toán chênh lệch tập hợp: Ghế ngồi không vé / sai ghế (B \\ A), ghế đã soát vé nhưng trống (A \\ B) và kiểm tra vượt tải (|B| > |A|).\n6. Lưu nhật ký vào bảng ai_inference_logs, sinh cảnh báo vào bảng alerts và trả về ảnh bằng chứng khoanh vùng."),
+            ("Luồng ngoại lệ", "1a. Không tìm thấy tệp cấu hình đa giác ghế của phòng → Trả về lỗi 404 Not Found.\n2a. Ảnh camera bị lỗi hoặc tối đen hoàn toàn → Ghi nhận cảnh báo chất lượng luồng camera vào nhật ký."),
+            ("Hậu điều kiện", "Kết quả đối soát ghế và các cảnh báo vi phạm được lưu trữ và đồng bộ tới Web Admin / Mobile App.")
+        ]
+    )
 
-    # Save docx
+    # 2.6.6. UC06
+    add_usecase_table(
+        "2.6.6. Use Case: Tiếp nhận và xử lý cảnh báo vi phạm",
+        "Bảng 2.8. Đặc tả Use Case Tiếp nhận và xử lý cảnh báo vi phạm",
+        [
+            ("Tên Use Case", "UC06 - Tiếp nhận và xử lý cảnh báo vi phạm theo phòng"),
+            ("Actor", "Admin (Quản trị viên), User (Nhân viên soát vé)"),
+            ("Mô tả", "Hiển thị cảnh báo vi phạm gom nhóm theo từng phòng chiếu và cho phép nhân viên/quản lý xác nhận xử lý từng ghế hoặc xử lý toàn bộ phòng chỉ với 1 chạm."),
+            ("Tiền điều kiện", "Hệ thống AI đã thực hiện UC05 và phát hiện có ghế vi phạm chưa xử lý (resolved = 0)."),
+            ("Luồng chính", "1. Web Admin và Mobile App hiển thị thẻ cảnh báo gom nhóm theo Phòng chiếu kèm 3 chỉ số (Vé đã quét, Trong rạp, Ghế vi phạm).\n2. Nhân viên xem danh sách mã ghế vi phạm cụ thể và ảnh khoanh vùng bằng chứng AI.\n3. Nhân viên trực tiếp vào phòng chiếu kiểm tra, nhắc nhở khách về đúng ghế hoặc yêu cầu mua vé bổ sung.\n4. Nhân viên hoặc Admin nhấn nút 'Xử lý toàn bộ phòng (1 chạm)' (POST /api/v1/alerts/resolve-room) hoặc xử lý từng cảnh báo (PUT /api/v1/alerts/{id}/resolve).\n5. Máy chủ cập nhật resolved = 1 và làm mới trạng thái an ninh của phòng chiếu."),
+            ("Luồng ngoại lệ", "4a. Lỗi kết nối mạng khi gửi xác nhận → Hiển thị thông báo lỗi và cho phép bấm thử lại."),
+            ("Hậu điều kiện", "Toàn bộ cảnh báo của phòng chiếu chuyển sang trạng thái 'Đã xử lý' trên cả Web Admin và Mobile App.")
+        ]
+    )
+
+    # 2.6.7. UC07
+    add_usecase_table(
+        "2.6.7. Use Case: Báo cáo và xử lý sự cố phòng chiếu",
+        "Bảng 2.9. Đặc tả Use Case Báo cáo và xử lý sự cố phòng chiếu",
+        [
+            ("Tên Use Case", "UC07 - Báo cáo và xử lý sự cố cơ sở vật chất"),
+            ("Actor", "User (Nhân viên soát vé), Admin (Quản trị viên)"),
+            ("Mô tả", "Nhân viên gửi báo cáo hư hỏng cơ sở vật chất kèm ảnh chụp thực tế từ Mobile App; Admin điều phối khắc phục và hệ thống tự động ẩn sự cố đã xử lý sau 1 giờ."),
+            ("Tiền điều kiện", "Nhân viên đã đăng nhập ứng dụng di động; Quản trị viên đăng nhập Web Admin."),
+            ("Luồng chính", "1. Nhân viên phát hiện sự cố (ghế hỏng, thiết bị, vệ sinh) và mở mục Báo cáo sự cố trên Mobile App.\n2. Chọn phòng chiếu, danh mục (seat_damage, equipment, facility, other), nhập vị trí ghế, mô tả và đính kèm ảnh chụp thực tế.\n3. Gửi yêu cầu tới API POST /api/v1/incidents; máy chủ lưu vào bảng incidents với trạng thái status = 'open' (Đang mở / Chờ xử lý).\n4. Admin xem chi tiết sự cố kèm ảnh trên Web Admin, điều phối khắc phục và bấm xác nhận hoàn tất (PUT /api/v1/incidents/{id}/resolve).\n5. Máy chủ cập nhật status = 'resolved' (Đã khắc phục); trên Mobile App sự cố đã xử lý tự động ẩn sau 1 tiếng hoặc nhân viên bấm xóa/ẩn ngay lập tức."),
+            ("Luồng ngoại lệ", "2a. Thiếu thông tin mô tả hoặc phòng chiếu → Ứng dụng nhắc nhở điền đầy đủ các trường bắt buộc.\n3a. Tệp ảnh tải lên không hợp lệ → Hệ thống từ chối và thông báo chỉ hỗ trợ định dạng ảnh chuẩn (JPG/PNG)."),
+            ("Hậu điều kiện", "Sự cố cơ sở vật chất được ghi nhận kèm hình ảnh minh chứng và theo dõi trọn vẹn đến khi khắc phục xong.")
+        ]
+    )
+
     doc.save(OUTPUT_DOCX)
     print("DOCX created successfully at:", OUTPUT_DOCX)
 
+
 if __name__ == "__main__":
     build_docx()
-

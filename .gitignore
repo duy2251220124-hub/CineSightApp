@@ -1,3 +1,4 @@
+*.apk
 
 # Ngrok
 ngrok.yml

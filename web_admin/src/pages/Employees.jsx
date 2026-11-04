@@ -8,7 +8,7 @@ export default function Employees() {
   const [empUsername, setEmpUsername] = useState('');
   const [empPassword, setEmpPassword] = useState('');
   const [empRole, setEmpRole] = useState('Soát vé');
-  const [empShift, setEmpShift] = useState('ca_sang');
+  const [empShift, setEmpShift] = useState('');
   const [empLoading, setEmpLoading] = useState(false);
 
   // Tài khoản đang đăng nhập
@@ -57,7 +57,7 @@ export default function Employees() {
       setEmpUsername('');
       setEmpPassword('');
       setEmpRole('Soát vé');
-      setEmpShift('ca_sang');
+      setEmpShift('');
       const emps = await getEmployees();
       setEmployees(emps);
     } catch (err) {
@@ -120,10 +120,30 @@ export default function Employees() {
     setEmpLoading(false);
   };
 
-  const getShiftBadge = (shift) => {
-    if (shift === 'ca_sang') return <span style={{ color: '#2563EB', fontWeight: 600 }}>Ca sáng (08:00 - 16:00)</span>;
-    if (shift === 'ca_toi') return <span style={{ color: '#7C3AED', fontWeight: 600 }}>Ca tối (16:00 - 24:00)</span>;
-    return <span style={{ color: 'var(--text-dim)' }}>Chưa phân ca</span>;
+  const getShiftBadge = (emp) => {
+    const shift = emp?.shift;
+    if (!shift || emp?.shift_label === 'Chưa có' || shift === 'none') {
+      return (
+        <span
+          style={{
+            color: 'var(--text-dim)',
+            fontStyle: 'italic',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#64748B' }}></span>
+          Chưa có
+        </span>
+      );
+    }
+    if (shift === 'ca_sang') return <span style={{ color: '#2563EB', fontWeight: 600 }}>● Ca sáng</span>;
+    if (shift === 'ca_chieu') return <span style={{ color: '#059669', fontWeight: 600 }}>● Ca chiều</span>;
+    if (shift === 'ca_toi') return <span style={{ color: '#7C3AED', fontWeight: 600 }}>● Ca tối</span>;
+    if (shift === 'ca_dem') return <span style={{ color: '#D97706', fontWeight: 600 }}>● Ca đêm</span>;
+    return <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>Chưa có</span>;
   };
 
   const formatLastSeen = (isoStr) => {
@@ -375,12 +395,14 @@ export default function Employees() {
                               onChange={e => setEditData({ ...editData, shift: e.target.value })}
                               style={{ padding: '4px 8px' }}
                             >
-                              <option value="">Chưa phân ca</option>
-                              <option value="ca_sang">Ca sáng (08:00 - 16:00)</option>
-                              <option value="ca_toi">Ca tối (16:00 - 24:00)</option>
+                              <option value="">Chưa có (Chờ đăng nhập)</option>
+                              <option value="ca_sang">Ca sáng</option>
+                              <option value="ca_chieu">Ca chiều</option>
+                              <option value="ca_toi">Ca tối</option>
+                              <option value="ca_dem">Ca đêm</option>
                             </select>
                           ) : (
-                            getShiftBadge(emp.shift)
+                            getShiftBadge(emp)
                           )}
                         </td>
 
@@ -484,9 +506,11 @@ export default function Employees() {
                 value={empShift}
                 onChange={e => setEmpShift(e.target.value)}
               >
-                <option value="ca_sang">Ca sáng (08:00 - 16:00)</option>
-                <option value="ca_toi">Ca tối (16:00 - 24:00)</option>
-                <option value="">Chưa phân ca</option>
+                <option value="">Chưa có (Chờ đăng nhập)</option>
+                <option value="ca_sang">Ca sáng</option>
+                <option value="ca_chieu">Ca chiều</option>
+                <option value="ca_toi">Ca tối</option>
+                <option value="ca_dem">Ca đêm</option>
               </select>
               <button
                 type="submit"

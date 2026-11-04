@@ -135,8 +135,10 @@ app = FastAPI(
 )
 
 SHIFTS = [
-    {"code": "ca_sang", "label": "Ca sáng", "start": "08:00", "end": "16:00"},
-    {"code": "ca_toi", "label": "Ca tối", "start": "16:00", "end": "24:00"}
+    {"code": "ca_sang", "label": "Ca sáng", "staff_hours": "07:30 - 13:00", "manager_hours": "07:30 - 16:00"},
+    {"code": "ca_chieu", "label": "Ca chiều", "staff_hours": "13:00 - 16:00", "manager_hours": "-"},
+    {"code": "ca_toi", "label": "Ca tối", "staff_hours": "16:00 - 23:00", "manager_hours": "16:30 - 24:00"},
+    {"code": "ca_dem", "label": "Ca đêm", "staff_hours": "23:00 - 07:30", "manager_hours": "00:00 - 07:30"}
 ]
 
 INCIDENT_CATEGORIES = [
@@ -809,6 +811,9 @@ def add_incident(payload: IncidentPayload, request: Request):
                 if s["code"] == shift_code:
                     shift_label = s["label"]
                     break
+        else:
+            from database import get_dynamic_shift
+            shift_code, shift_label = get_dynamic_shift(emp.get("role"))
 
         created_at = datetime.datetime.now().astimezone().isoformat()
         

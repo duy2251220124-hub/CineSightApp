@@ -24,6 +24,43 @@ class ApiClient {
     _dio.options.headers.remove('Authorization');
   }
 
+  /// Tính toán ca làm việc động dựa trên vai trò và thời điểm (Giờ địa phương / Giờ đăng nhập)
+  /// - Nhân viên:
+  ///   + 07:30 - 13:00: Ca sáng (07:30 - 13:00)
+  ///   + 13:00 - 16:00: Ca chiều (13:00 - 16:00)
+  ///   + 16:00 - 23:00: Ca tối (16:00 - 23:00)
+  ///   + 23:00 - 07:30: Ca đêm (23:00 - 07:30)
+  /// - Quản lý:
+  ///   + 07:30 - 16:00: Ca sáng (07:30 - 16:00)
+  ///   + 16:00 - 24:00: Ca tối (16:30 - 24:00)
+  ///   + 00:00 - 07:30: Ca đêm (00:00 - 07:30)
+  static String getDynamicShiftLabel(String? role, [DateTime? time]) {
+    final now = time ?? DateTime.now();
+    final minuteOfDay = now.hour * 60 + now.minute;
+    final r = (role ?? '').trim().toLowerCase();
+    final isManager = r.contains('quản lý') || r.contains('manager') || r.contains('admin');
+
+    if (isManager) {
+      if (minuteOfDay >= 450 && minuteOfDay < 960) {
+        return 'Ca sáng (07:30 - 16:00)';
+      } else if (minuteOfDay >= 960 && minuteOfDay < 1440) {
+        return 'Ca tối (16:30 - 24:00)';
+      } else {
+        return 'Ca đêm (00:00 - 07:30)';
+      }
+    } else {
+      if (minuteOfDay >= 450 && minuteOfDay < 780) {
+        return 'Ca sáng (07:30 - 13:00)';
+      } else if (minuteOfDay >= 780 && minuteOfDay < 960) {
+        return 'Ca chiều (13:00 - 16:00)';
+      } else if (minuteOfDay >= 960 && minuteOfDay < 1380) {
+        return 'Ca tối (16:00 - 23:00)';
+      } else {
+        return 'Ca đêm (23:00 - 07:30)';
+      }
+    }
+  }
+
   static Future<bool> login(String username, String password) async {
     final cleanUser = username.trim();
     final cleanPass = password.trim();

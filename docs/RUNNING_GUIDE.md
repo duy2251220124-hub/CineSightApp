@@ -13,7 +13,7 @@
 
 Do Mobile App (chạy trên điện thoại hoặc máy ảo) cần đường dẫn Internet để chọc về máy tính của bạn, ta cần Ngrok tạo 1 "đường hầm" (tunnel).
 
-1. Mở một cửa sổ Terminal THỨ 2:
+
    ```powershell
    cd c:\CineSightApp
    .\ngrok_bin\ngrok http 8000
