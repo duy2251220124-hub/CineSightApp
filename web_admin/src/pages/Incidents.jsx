@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getIncidents, resolveIncident, deleteIncident, getIncidentCategories, getStoredUser } from '../api/cineSightApi';
+import { getIncidents, resolveIncident, deleteIncident, getIncidentCategories, getStoredUser, API_BASE } from '../api/cineSightApi';
 import '../styles/dashboard.css';
 
 export default function Incidents() {
@@ -20,6 +20,7 @@ export default function Incidents() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const [selectedIncident, setSelectedIncident] = useState(null);
+  const [viewingPhoto, setViewingPhoto] = useState(null);
 
   useEffect(() => {
     let currentIds = new Set();
@@ -334,7 +335,18 @@ export default function Incidents() {
                         <td className="mono" style={{ whiteSpace: 'nowrap' }}>
                           {formatTime(inc.created_at)}
                         </td>
-                        <td>{getCategoryLabel(inc.category)}</td>
+                        <td>
+                          <span>{getCategoryLabel(inc.category)}</span>
+                          {inc.image_path && (
+                            <span 
+                              title="Có ảnh hiện trường (Bấm để xem)" 
+                              style={{ marginLeft: 6, fontSize: 13, cursor: 'pointer', verticalAlign: 'middle' }}
+                              onClick={(e) => { e.stopPropagation(); setViewingPhoto(inc.image_path); }}
+                            >
+                              📷
+                            </span>
+                          )}
+                        </td>
                         <td className={isHigh ? 'alert-red' : ''}>
                           {inc.severity === 'high' ? 'Cao' : inc.severity === 'low' ? 'Thấp' : 'Bình thường'}
                         </td>
@@ -415,6 +427,47 @@ export default function Incidents() {
                   </div>
                 </div>
 
+                {selectedIncident.image_path && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>ẢNH CHỤP HIỆN TRƯỜNG</div>
+                    <div 
+                      style={{ 
+                        position: 'relative', 
+                        borderRadius: 8, 
+                        overflow: 'hidden', 
+                        border: '1px solid var(--grid-line)', 
+                        cursor: 'pointer',
+                        backgroundColor: '#0F172A',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                      onClick={() => setViewingPhoto(selectedIncident.image_path)}
+                    >
+                      <img 
+                        src={selectedIncident.image_path.startsWith('http') ? selectedIncident.image_path : `${API_BASE}${selectedIncident.image_path}`}
+                        alt="Hiện trường sự cố"
+                        style={{ width: '100%', maxHeight: 220, objectFit: 'cover', display: 'block' }}
+                      />
+                      <div style={{ 
+                        position: 'absolute', 
+                        bottom: 8, 
+                        right: 8, 
+                        background: 'rgba(15, 23, 42, 0.85)', 
+                        color: '#fff', 
+                        fontSize: 11, 
+                        padding: '4px 10px', 
+                        borderRadius: 6,
+                        backdropFilter: 'blur(4px)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}>
+                        <span>🔍 Bấm để phóng to</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Loại sự cố</div>
@@ -494,6 +547,63 @@ export default function Incidents() {
           )}
         </div>
       </div>
+
+      {viewingPhoto && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            backdropFilter: 'blur(6px)'
+          }}
+          onClick={() => setViewingPhoto(null)}
+        >
+          <div 
+            style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              style={{
+                position: 'absolute',
+                top: -16,
+                right: -16,
+                background: '#DC2626',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '50%',
+                width: 36,
+                height: 36,
+                fontSize: 18,
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={() => setViewingPhoto(null)}
+            >
+              ✕
+            </button>
+            <img 
+              src={viewingPhoto.startsWith('http') ? viewingPhoto : `${API_BASE}${viewingPhoto}`}
+              alt="Chi tiết ảnh hiện trường"
+              style={{ 
+                maxWidth: '90vw', 
+                maxHeight: '85vh', 
+                objectFit: 'contain', 
+                borderRadius: 8,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

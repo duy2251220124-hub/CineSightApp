@@ -6,6 +6,7 @@ import 'package:mobile_app/core/utils/room_utils.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
 import 'package:mobile_app/core/widgets/cs_status_tag.dart';
 import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/features/alerts/presentation/cs_handover_screen.dart';
 
 /// Hiện popup thông báo Bàn giao ca & Sự cố rạp nhỏ, bật ra từ icon chuông góc trên bên phải.
 Future<void> showCSNotificationPopover(
@@ -148,9 +149,13 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
                         padding: const EdgeInsets.fromLTRB(14, 10, 4, 4),
                         child: Row(
                           children: [
-                            const Text(
+                            Text(
                               'Bàn giao ca & Sự cố',
-                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: CSAppColors.textPrimary,
+                              ),
                             ),
                             const SizedBox(width: 7),
                             CSStatusTag(
@@ -167,12 +172,12 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
                               tooltip: 'Đóng',
                               iconSize: 18,
                               onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close),
+                              icon: Icon(Icons.close, color: CSAppColors.textPrimary),
                             ),
                           ],
                         ),
                       ),
-                      const Divider(height: 1),
+                      Divider(height: 1, color: CSAppColors.border),
                       Flexible(
                         child: _isLoading
                             ? const Padding(
@@ -180,8 +185,8 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
                                 child: Center(child: CircularProgressIndicator()),
                               )
                             : _incidents.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.all(20),
+                                ? Padding(
+                                    padding: const EdgeInsets.all(20),
                                     child: Center(
                                       child: Text(
                                         'Không có sự cố nào tồn đọng từ ca trước',
@@ -194,10 +199,11 @@ class _CSNotificationPopoverState extends State<_CSNotificationPopover> {
                                     shrinkWrap: true,
                                     padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
                                     itemCount: _incidents.length,
-                                    separatorBuilder: (_, _) => const Divider(height: 1),
+                                    separatorBuilder: (_, _) => Divider(height: 1, color: CSAppColors.border),
                                     itemBuilder: (context, index) {
                                       return CSHandoverIncidentItemView(
                                         incident: _incidents[index],
+                                        onResolved: _loadData,
                                       );
                                     },
                                   ),
@@ -268,15 +274,17 @@ class _CSNotificationScreenState extends State<CSNotificationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: CSAppColors.background,
       body: SafeArea(
+        bottom: false,
         child: RefreshIndicator(
           onRefresh: _loadData,
           child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 125),
             children: [
               const CSScreenHeader(
                 title: 'Bàn giao ca & Sự cố',
-                subtitle: 'Các sự cố, trục trặc cơ sở vật chất từ ca trước',
+                subtitle: 'Chạm vào sự cố để mở khung xem chi tiết',
               ),
               if (_isLoading)
                 const Padding(
@@ -284,8 +292,8 @@ class _CSNotificationScreenState extends State<CSNotificationScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (_incidents.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(40),
+                Padding(
+                  padding: const EdgeInsets.all(40),
                   child: Center(
                     child: Text(
                       'Tất cả sự cố đã được giải quyết!\nKhông có ghi chú bàn giao tồn đọng.',
@@ -299,9 +307,10 @@ class _CSNotificationScreenState extends State<CSNotificationScreen> {
                   child: Column(
                     children: [
                       for (var i = 0; i < _incidents.length; i++) ...[
-                        if (i > 0) const Divider(),
+                        if (i > 0) Divider(color: CSAppColors.border),
                         CSHandoverIncidentItemView(
                           incident: _incidents[i],
+                          onResolved: _loadData,
                         ),
                       ],
                     ],
@@ -317,10 +326,12 @@ class _CSNotificationScreenState extends State<CSNotificationScreen> {
 
 class CSHandoverIncidentItemView extends StatelessWidget {
   final dynamic incident;
+  final VoidCallback? onResolved;
 
   const CSHandoverIncidentItemView({
     super.key,
     required this.incident,
+    this.onResolved,
   });
 
   @override
@@ -329,75 +340,224 @@ class CSHandoverIncidentItemView extends StatelessWidget {
     final desc = incident['description'] ?? 'Không có mô tả chi tiết';
     final rawRoom = incident['room_id'] ?? incident['room'] ?? '';
     final room = formatRoomName(rawRoom.toString());
-    final seats = incident['seat_id'] ?? incident['seats'] ?? '';
+    final rawSeats = incident['seat_ids'] ?? incident['seat_id'] ?? incident['seats'];
+    String seats = '';
+    if (rawSeats is List && rawSeats.isNotEmpty) {
+      seats = rawSeats.join(', ');
+    } else if (rawSeats != null && rawSeats.toString().trim().isNotEmpty && rawSeats.toString() != '[]') {
+      seats = rawSeats.toString();
+    }
     final reporter = incident['reporter_name'] ?? incident['created_by'] ?? 'Nhân viên ca trước';
+    final shiftLabel = incident['shift_label'] ?? incident['reporter_shift'] ?? '';
 
     final dateStr = incident['created_at'] ?? incident['timestamp'] ?? '';
     final date = DateTime.tryParse(dateStr)?.toLocal();
     final timeStr = date != null
-        ? '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} · ${date.day}/${date.month}/${date.year}'
+        ? '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} · ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'
         : '';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: CSAppColors.warning.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => showIncidentDetailDialog(
+        context,
+        incident,
+        onResolved: onResolved,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: CSAppColors.warning.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.handyman_outlined, color: CSAppColors.warning, size: 18),
             ),
-            child: const Icon(Icons.handyman_outlined, color: CSAppColors.warning, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            color: CSAppColors.textPrimary,
+                          ),
+                        ),
                       ),
+                      const CSStatusTag(text: 'CHỜ XỬ LÝ', color: CSAppColors.warning),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: CSAppColors.surfaceStrong,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: CSAppColors.border),
                     ),
-                    const CSStatusTag(text: 'CHỜ XỬ LÝ', color: CSAppColors.warning),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                if (room.isNotEmpty || seats.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      'Vị trí: ${rawRoom.toString().isNotEmpty ? room : ''}${seats.isNotEmpty ? ' · Ghế $seats' : ''}',
-                      style: const TextStyle(color: CSAppColors.primary, fontSize: 11, fontWeight: FontWeight.w600),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (room.isNotEmpty || seats.isNotEmpty)
+                          Row(
+                            children: [
+                              const Icon(Icons.meeting_room_rounded, size: 14, color: CSAppColors.primary),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  '${rawRoom.toString().isNotEmpty ? room : ''}${seats.isNotEmpty ? ' · Ghế $seats' : ''}',
+                                  style: TextStyle(
+                                    color: CSAppColors.textPrimary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            const Icon(Icons.person_pin_rounded, size: 14, color: CSAppColors.success),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                'Người báo: $reporter${shiftLabel.toString().isNotEmpty ? ' ($shiftLabel)' : ''}',
+                                style: TextStyle(
+                                  color: CSAppColors.textPrimary,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (timeStr.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              const Icon(Icons.access_time_filled_rounded, size: 14, color: CSAppColors.warning),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  'Giờ báo: $timeStr',
+                                  style: const TextStyle(color: CSAppColors.warning, fontSize: 11.5, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                Text(
-                  desc,
-                  style: const TextStyle(color: CSAppColors.muted, fontSize: 11),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      'Bàn giao bởi: $reporter',
-                      style: const TextStyle(color: CSAppColors.muted, fontSize: 10, fontStyle: FontStyle.italic),
-                    ),
-                    const Spacer(),
-                    Text(
-                      timeStr,
-                      style: const TextStyle(color: CSAppColors.muted, fontSize: 9),
+                  const SizedBox(height: 5),
+                  Text(
+                    desc,
+                    style: TextStyle(color: CSAppColors.textSecondary, fontSize: 11.5),
+                  ),
+                  if (incident['image_path'] != null && incident['image_path'].toString().trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (ctx) {
+                        final imgUrl = ApiClient.getImageUrl(incident['image_path'].toString());
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            onTap: () {
+                              showDialog(
+                                context: ctx,
+                                builder: (dialogCtx) => Dialog(
+                                  backgroundColor: Colors.transparent,
+                                  insetPadding: const EdgeInsets.all(12),
+                                  child: Stack(
+                                    alignment: Alignment.topRight,
+                                    children: [
+                                      InteractiveViewer(
+                                        child: Image.network(
+                                          imgUrl,
+                                          headers: const {'ngrok-skip-browser-warning': 'true'},
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (_, _, _) => Container(
+                                            padding: const EdgeInsets.all(20),
+                                            color: Colors.black87,
+                                            child: const Text('Không thể tải ảnh hiện trường', style: TextStyle(color: Colors.white70)),
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                                        onPressed: () => Navigator.of(dialogCtx).pop(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                Image.network(
+                                  imgUrl,
+                                  height: 120,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                  headers: const {'ngrok-skip-browser-warning': 'true'},
+                                  errorBuilder: (_, _, _) => Container(
+                                    height: 60,
+                                    color: CSAppColors.surfaceStrong,
+                                    alignment: Alignment.center,
+                                    child: Text('Lỗi tải ảnh', style: TextStyle(color: CSAppColors.muted, fontSize: 11)),
+                                  ),
+                                ),
+                                Container(
+                                  margin: const EdgeInsets.all(6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.zoom_in, color: Colors.white, size: 12),
+                                      SizedBox(width: 4),
+                                      Text('Xem ảnh', style: TextStyle(color: Colors.white, fontSize: 10)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ],
-                ),
-              ],
+                  const SizedBox(height: 5),
+                  const Row(
+                    children: [
+                      Icon(Icons.touch_app_outlined, size: 12, color: CSAppColors.primary),
+                      SizedBox(width: 4),
+                      Text(
+                        'Chạm để mở chi tiết sự cố',
+                        style: TextStyle(color: CSAppColors.primary, fontSize: 10.5, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

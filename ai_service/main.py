@@ -648,7 +648,7 @@ class EmployeePayload(BaseModel):
     password: str
     name: str
     role: str
-    shift: str = None
+    shift: Optional[str] = None
     is_active: Optional[int] = None
 
 @app.get("/api/v1/employees")
@@ -760,10 +760,10 @@ class IncidentPayload(BaseModel):
     category: str
     severity: str
     title: str
-    description: str
-    room_id: str = None
-    show_id: str = None
-    seat_ids: list = []
+    description: Optional[str] = ""
+    room_id: Optional[str] = None
+    show_id: Optional[str] = None
+    seat_ids: Optional[list] = []
     reporter_id: Optional[int] = None
     reporter_name: Optional[str] = None
     reporter_role: Optional[str] = None
@@ -784,7 +784,7 @@ def add_incident(payload: IncidentPayload, request: Request):
             return JSONResponse(status_code=400, content={"error": "Loại sự cố không hợp lệ"})
             
         import re
-        if payload.show_id and not re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$', payload.show_id):
+        if payload.show_id and payload.show_id.strip() not in ("", "auto", "all", "null", "None") and not re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$', payload.show_id.strip()):
             return JSONResponse(status_code=422, content={"error": "Định dạng show_id không hợp lệ (cần ISO yyyy-MM-ddTHH:mm)"})
             
         from seat_mapper import normalize_seat
@@ -821,7 +821,7 @@ def add_incident(payload: IncidentPayload, request: Request):
             category=payload.category,
             severity=payload.severity,
             title=payload.title,
-            description=payload.description,
+            description=payload.description or "",
             room_id=payload.room_id,
             show_id=payload.show_id,
             seat_ids=seat_ids_json,
@@ -898,7 +898,7 @@ def upload_incident_photo_endpoint(incident_id: int, image: UploadFile = File(..
         if not inc:
             return JSONResponse(status_code=404, content={"error": f"Không tìm thấy sự cố {incident_id}"})
         
-        ext = os.path.splitext(image.filename)[1] or ".jpg"
+        ext = os.path.splitext(image.filename or "image.jpg")[1] or ".jpg"
         clean_ext = ext if ext.lower() in [".jpg", ".jpeg", ".png", ".webp"] else ".jpg"
         saved_filename = f"incident_{incident_id}_{int(datetime.datetime.now().timestamp())}{clean_ext}"
         saved_path = os.path.join(INCIDENTS_UPLOAD_DIR, saved_filename)
@@ -1089,6 +1089,18 @@ async def _scheduler_daemon_loop():
 
 @app.on_event("startup")
 async def _start_camera_scheduler():
+    try:
+        from scheduler import DEFAULT_CONFIG, TZ_VN, run_for_day
+        from movies_repo import get_connection
+        today_vn = datetime.datetime.now(TZ_VN).date()
+        conn_sched = get_connection()
+        try:
+            for offset_d in range(0, 7):
+                run_for_day(conn_sched, today_vn + datetime.timedelta(days=offset_d), DEFAULT_CONFIG, write=True)
+        finally:
+            conn_sched.close()
+    except Exception as e:
+        print(f"[SCHEDULER] Khởi tạo lịch chiếu tự động: {e}")
     asyncio.create_task(_scheduler_daemon_loop())
 
 
@@ -1170,17 +1182,56 @@ except Exception as e:
 
 
 # ---------------------------------------------------------------------------
-# Vấn đề 5: FastAPI phục vụ luôn bản build Web Admin (1 cổng duy nhất).
-# Đặt SAU toàn bộ route /api/v1/... để route API luôn được ưu tiên.
+# Phục vụ Flutter Mobile Web App (dành cho iOS / Safari / PWA)
 # ---------------------------------------------------------------------------
-if os.path.isdir(os.path.join(WEB_ADMIN_DIST, "assets")):
-    app.mount("/assets", StaticFiles(directory=os.path.join(WEB_ADMIN_DIST, "assets")), name="admin-assets")
+MOBILE_WEB_BUILD_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', 'mobile_app', 'build', 'web')
+)
+if os.path.exists(MOBILE_WEB_BUILD_DIR):
+    from fastapi.responses import RedirectResponse
 
-    @app.get("/{full_path:path}", include_in_schema=False)
+    from starlette.exceptions import HTTPException
+
+    class SinglePageApplication(StaticFiles):
+        async def get_response(self, path: str, scope):
+            try:
+                return await super().get_response(path, scope)
+            except HTTPException as e:
+                if e.status_code == 404:
+                    return await super().get_response('index.html', scope)
+                raise e
+
+    @app.get('/app', include_in_schema=False)
+    def redirect_mobile_web():
+        return RedirectResponse(url='/app/')
+
+    app.mount(
+        '/app',
+        SinglePageApplication(directory=MOBILE_WEB_BUILD_DIR, html=True),
+        name='cinesight_mobile_web',
+    )
+
+
+# ---------------------------------------------------------------------------
+# Vấn đề 5: FastAPI phục vụ luôn bản build Web Admin (1 cổng duy nhất).
+# Đặt SAU toàn bộ route /api/v1/... và /app để route API và Mobile luôn được ưu tiên.
+# ---------------------------------------------------------------------------
+if os.path.isdir(os.path.join(WEB_ADMIN_DIST, 'assets')):
+    app.mount('/assets', StaticFiles(directory=os.path.join(WEB_ADMIN_DIST, 'assets')), name='admin-assets')
+
+    @app.get('/{full_path:path}', include_in_schema=False)
     def serve_web_admin(full_path: str):
-        if full_path.startswith("api/") or full_path in ("docs", "openapi.json", "redoc"):
-            return JSONResponse(status_code=404, content={"error": "Not found"})
+        if full_path.startswith('api/') or full_path in ('docs', 'openapi.json', 'redoc'):
+            return JSONResponse(status_code=404, content={'error': 'Not found'})
+        if full_path == 'app' or full_path.startswith('app/'):
+            if os.path.exists(MOBILE_WEB_BUILD_DIR):
+                sub_path = full_path[4:] if full_path.startswith('app/') else ''
+                candidate_mobile = os.path.abspath(os.path.join(MOBILE_WEB_BUILD_DIR, sub_path))
+                if sub_path and candidate_mobile.startswith(MOBILE_WEB_BUILD_DIR + os.sep) and os.path.isfile(candidate_mobile):
+                    return FileResponse(candidate_mobile)
+                return FileResponse(os.path.join(MOBILE_WEB_BUILD_DIR, 'index.html'))
+            return JSONResponse(status_code=404, content={'error': 'Mobile web build not found'})
         candidate = os.path.abspath(os.path.join(WEB_ADMIN_DIST, full_path))
         if full_path and candidate.startswith(WEB_ADMIN_DIST + os.sep) and os.path.isfile(candidate):
             return FileResponse(candidate)
-        return FileResponse(os.path.join(WEB_ADMIN_DIST, "index.html"))
+        return FileResponse(os.path.join(WEB_ADMIN_DIST, 'index.html'))

@@ -88,14 +88,18 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: CSAppColors.surface,
-        title: const Text('Làm trống lịch sử quét vé?'),
-        content: const Text(
+        title: Text(
+          'Làm trống lịch sử quét vé?',
+          style: TextStyle(color: CSAppColors.textPrimary),
+        ),
+        content: Text(
           'Thao tác này sẽ xóa toàn bộ danh sách vé đã quét trên máy để bắt đầu phiên kiểm thử mới.',
+          style: TextStyle(color: CSAppColors.muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Hủy', style: TextStyle(color: CSAppColors.muted)),
+            child: Text('Hủy', style: TextStyle(color: CSAppColors.muted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -124,6 +128,7 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isLight = CSAppColors.isLight;
     final movie = CSMockMovie(
       id: '1',
       title: 'Soát vé rạp',
@@ -150,7 +155,9 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
             .toList();
 
     return Scaffold(
+      backgroundColor: CSAppColors.background,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             CSScreenHeader(
@@ -162,24 +169,32 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
             // Khối trạng thái đồng bộ vé tồn
             Builder(builder: (context) {
               final pendingCount = HiveService.getPendingTicketsCount();
+              final Color cardBg = pendingCount > 0
+                  ? (isLight ? const Color(0xFFFEF9C3) : const Color(0xFF2E2215))
+                  : (isLight ? const Color(0xFFDCFCE7) : const Color(0xFF14241B));
+              final Color titleColor = pendingCount > 0
+                  ? (isLight ? const Color(0xFFA16207) : const Color(0xFFFEF08A))
+                  : (isLight ? const Color(0xFF15803D) : const Color(0xFF86EFAC));
+              final Color iconColor = pendingCount > 0
+                  ? (isLight ? const Color(0xFFD97706) : const Color(0xFFEAB308))
+                  : (isLight ? const Color(0xFF16A34A) : const Color(0xFF22C55E));
+
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: pendingCount > 0 ? const Color(0xFF2E2215) : const Color(0xFF14241B),
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: pendingCount > 0
-                          ? const Color(0xFFEAB308).withValues(alpha: 0.5)
-                          : const Color(0xFF22C55E).withValues(alpha: 0.4),
+                      color: iconColor.withValues(alpha: 0.45),
                     ),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         pendingCount > 0 ? Icons.cloud_off_outlined : Icons.cloud_done_outlined,
-                        color: pendingCount > 0 ? const Color(0xFFEAB308) : const Color(0xFF22C55E),
+                        color: iconColor,
                         size: 22,
                       ),
                       const SizedBox(width: 10),
@@ -194,14 +209,14 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
                               style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
-                                color: pendingCount > 0 ? const Color(0xFFFEF08A) : const Color(0xFF86EFAC),
+                                color: titleColor,
                               ),
                             ),
                             Text(
                               pendingCount > 0
                                   ? 'Bấm nút bên cạnh để gửi ngay khi có mạng'
                                   : 'Dữ liệu đã khớp với máy chủ thời gian thực',
-                              style: const TextStyle(fontSize: 11, color: CSAppColors.muted),
+                              style: TextStyle(fontSize: 11, color: CSAppColors.muted),
                             ),
                           ],
                         ),
@@ -223,8 +238,10 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
                                 ),
                                 onPressed: _handleManualSync,
                                 icon: const Icon(Icons.sync, size: 14),
-                                label: const Text('Đồng bộ ngay',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                label: const Text(
+                                  'Đồng bộ ngay',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
                               ),
                     ],
                   ),
@@ -243,7 +260,10 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
                       children: [
                         Text(
                           movie.room,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: CSAppColors.textPrimary,
+                          ),
                         ),
                         Text(
                           'Đã soát: ${all.length}/${movie.capacity}',
@@ -255,7 +275,7 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Nhấn biểu tượng thùng rác góc trên để làm trống dữ liệu kiểm thử bất cứ lúc nào.',
                       style: TextStyle(color: CSAppColors.muted, fontSize: 11),
                     ),
@@ -268,8 +288,9 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: TextField(
                 onChanged: (value) => setState(() => _query = value),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
+                style: TextStyle(color: CSAppColors.textPrimary, fontSize: 13.5),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.search, color: CSAppColors.muted),
                   hintText: 'Tìm kiếm mã vé, số ghế...',
                   isDense: true,
                 ),
@@ -283,11 +304,11 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
                         all.isEmpty
                             ? 'Chưa có vé nào được quét (Sơ đồ ghế đang trống)'
                             : 'Không tìm thấy vé phù hợp',
-                        style: const TextStyle(color: CSAppColors.muted),
+                        style: TextStyle(color: CSAppColors.muted),
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 125),
                       itemCount: records.length,
                       itemBuilder: (context, index) {
                         final record = records[index];
@@ -304,13 +325,14 @@ class _CSScanHistoryScreenState extends State<CSScanHistoryScreen> {
                                     children: [
                                       Text(
                                         record.ticket,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontWeight: FontWeight.w700,
+                                          color: CSAppColors.textPrimary,
                                         ),
                                       ),
                                       Text(
                                         'Thời gian: ${formatScanTime(record.scannedAt)}',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: CSAppColors.muted,
                                           fontSize: 10,
                                         ),

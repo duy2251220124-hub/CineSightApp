@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'core/database/hive_service.dart';
 import 'package:mobile_app/core/theme/app_theme.dart';
+import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/features/auth/presentation/cs_login_screen.dart';
 import 'features/home/presentation/home_screen.dart';
 
@@ -20,23 +21,27 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'CineSight',
-      debugShowCheckedModeBanner: false,
-      // Dùng theme tập trung từ AppTheme — KHÔNG định nghĩa màu trực tiếp ở đây
-      theme: AppTheme.dark,
-      // TODO: nối dữ liệu thật sau — thay bằng go_router khi có auth logic
-      // Hiện tại: bắt đầu từ LoginScreen để đúng luồng Figma
-      home: Builder(
-        builder: (ctx) => CSLoginScreen(
-          onLogin: () {
-            Navigator.pushReplacement(
-              ctx,
-              MaterialPageRoute(builder: (_) => const HomeShell()),
-            );
-          },
-        ),
-      ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: HiveService.lightModeNotifier,
+      builder: (context, isLight, _) {
+        return MaterialApp(
+          title: 'CineSight',
+          debugShowCheckedModeBanner: false,
+          // Dùng theme động (Light/Dark) cho toàn bộ các màn hình sau đăng nhập;
+          // riêng CSLoginScreen được khóa cứng vào AppTheme.dark để giữ nguyên thiết kế gốc.
+          theme: isLight ? CSAppTheme.light : AppTheme.dark,
+          home: Builder(
+            builder: (ctx) => CSLoginScreen(
+              onLogin: () {
+                Navigator.pushReplacement(
+                  ctx,
+                  MaterialPageRoute(builder: (_) => const HomeShell()),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }

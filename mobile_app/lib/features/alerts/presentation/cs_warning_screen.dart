@@ -87,9 +87,12 @@ class CSWarningScreenState extends State<CSWarningScreen> {
   @override
   Widget build(BuildContext context) {
     final grouped = _groupByRoomAndShow();
+    final bool isLight = CSAppColors.isLight;
 
     return Scaffold(
+      backgroundColor: CSAppColors.background,
       body: SafeArea(
+        bottom: false,
         child: RefreshIndicator(
           onRefresh: loadAlerts,
           child: Column(
@@ -136,14 +139,14 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                             _alerts.isNotEmpty
                                 ? 'Phát hiện chênh lệch đối soát qua camera phòng chiếu'
                                 : 'Không phát hiện vi phạm nào trong các phòng chiếu',
-                            style: const TextStyle(color: CSAppColors.muted, fontSize: 11),
+                            style: TextStyle(color: CSAppColors.muted, fontSize: 11),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
                       tooltip: 'Tải lại',
-                      icon: const Icon(Icons.refresh, size: 20),
+                      icon: Icon(Icons.refresh, size: 20, color: CSAppColors.textPrimary),
                       onPressed: () {
                         setState(() => _isLoading = true);
                         loadAlerts();
@@ -159,18 +162,22 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _alerts.isEmpty
                         ? ListView(
-                            children: const [
+                            children: [
                               Padding(
-                                padding: EdgeInsets.symmetric(vertical: 80, horizontal: 20),
+                                padding: const EdgeInsets.symmetric(vertical: 80, horizontal: 20),
                                 child: Column(
                                   children: [
-                                    Icon(Icons.verified_user_outlined, color: CSAppColors.success, size: 54),
-                                    SizedBox(height: 12),
+                                    const Icon(Icons.verified_user_outlined, color: CSAppColors.success, size: 54),
+                                    const SizedBox(height: 12),
                                     Text(
                                       'Không có cảnh báo vi phạm nào!',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: CSAppColors.textPrimary,
+                                      ),
                                     ),
-                                    SizedBox(height: 6),
+                                    const SizedBox(height: 6),
                                     Text(
                                       'Mọi vị trí ngồi trong rạp đều khớp với vé đã soát.',
                                       style: TextStyle(color: CSAppColors.muted, fontSize: 12),
@@ -182,7 +189,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                             ],
                           )
                         : ListView(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
                             children: grouped.entries.map((entry) {
                               final groupKey = entry.key;
                               final roomAlerts = entry.value;
@@ -211,7 +218,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                     ),
                                     boxShadow: [
                                       BoxSideShadow(
-                                        color: Colors.black.withValues(alpha: 0.25),
+                                        color: Colors.black.withValues(alpha: isLight ? 0.06 : 0.25),
                                         blurRadius: 8,
                                         offset: const Offset(0, 3),
                                       ),
@@ -234,10 +241,10 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                             Expanded(
                                               child: Text(
                                                 '$roomName • Suất $timeDisplay',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontWeight: FontWeight.w800,
                                                   fontSize: 14,
-                                                  color: Colors.white,
+                                                  color: CSAppColors.textPrimary,
                                                 ),
                                               ),
                                             ),
@@ -279,7 +286,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                                 label: 'Trong rạp',
                                                 value: '$detectedPeople',
                                                 icon: Icons.groups_outlined,
-                                                color: Colors.cyanAccent,
+                                                color: isLight ? const Color(0xFF0284C7) : Colors.cyanAccent,
                                               ),
                                             ),
                                             const SizedBox(width: 8),
@@ -364,12 +371,12 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                             IconButton(
                                               tooltip: isExpanded ? 'Thu gọn' : 'Xem từng ghế',
                                               style: IconButton.styleFrom(
-                                                backgroundColor: CSAppColors.border.withValues(alpha: 0.3),
+                                                backgroundColor: CSAppColors.surfaceStrong,
                                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                               ),
                                               icon: Icon(
                                                 isExpanded ? Icons.expand_less : Icons.expand_more,
-                                                color: Colors.white70,
+                                                color: CSAppColors.textPrimary,
                                               ),
                                               onPressed: () {
                                                 setState(() {
@@ -390,7 +397,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                         Container(
                                           padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
                                           decoration: BoxDecoration(
-                                            color: Colors.black.withValues(alpha: 0.15),
+                                            color: CSAppColors.surfaceStrong,
                                             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
                                           ),
                                           child: Column(
@@ -435,11 +442,11 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                                             crossAxisAlignment: CrossAxisAlignment.start,
                                                             children: [
                                                               Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
-                                                              Text('Vị trí ghế: $seat', style: const TextStyle(fontSize: 11, color: CSAppColors.muted)),
+                                                              Text('Vị trí ghế: $seat', style: TextStyle(fontSize: 11, color: CSAppColors.muted)),
                                                             ],
                                                           ),
                                                         ),
-                                                        const Icon(Icons.arrow_forward_ios, size: 12, color: CSAppColors.muted),
+                                                        Icon(Icons.arrow_forward_ios, size: 12, color: CSAppColors.muted),
                                                       ],
                                                     ),
                                                   ),
@@ -471,7 +478,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
+        color: CSAppColors.surfaceStrong,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
@@ -495,7 +502,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(color: CSAppColors.muted, fontSize: 10),
+            style: TextStyle(color: CSAppColors.muted, fontSize: 10),
             textAlign: TextAlign.center,
           ),
         ],

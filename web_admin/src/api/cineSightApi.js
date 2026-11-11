@@ -20,6 +20,7 @@ const resolveApiBase = () => {
 const API_BASE = resolveApiBase();
 
 const api = axios.create({ 
+  headers: { 'ngrok-skip-browser-warning': 'true' },
   baseURL: API_BASE,
 });
 

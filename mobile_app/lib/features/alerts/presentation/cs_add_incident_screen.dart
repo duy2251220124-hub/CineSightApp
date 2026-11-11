@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_app/theme/app_theme.dart';
@@ -35,7 +35,8 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   bool _isLoading = false;
-  File? _imageFile;
+  XFile? _imageFile;
+  Uint8List? _imageBytes;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -71,8 +72,10 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
         imageQuality: 85,
       );
       if (picked != null) {
+        final bytes = await picked.readAsBytes();
         setState(() {
-          _imageFile = File(picked.path);
+          _imageFile = picked;
+          _imageBytes = bytes;
         });
       }
     } catch (e) {
@@ -90,6 +93,8 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
       context,
       MaterialPageRoute(
         builder: (pickerCtx) => CSDamagedSeatScreen(
+          roomId: _selectedRoomId,
+          initialSeats: _seats,
           onAddPhoto: (pickedSeats) {
             setState(() {
               _seats = List<String>.from(pickedSeats);
@@ -143,10 +148,14 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
 
     if (result['success'] == true) {
       final dynamic rawIncId = result['data']?['id'] ?? result['data']?['incident_id'];
-      if (_imageFile != null && rawIncId != null) {
+      if (_imageBytes != null && rawIncId != null) {
         final int? incId = rawIncId is int ? rawIncId : int.tryParse(rawIncId.toString());
         if (incId != null) {
-          await ApiClient.uploadIncidentPhoto(incId, _imageFile!.path);
+          await ApiClient.uploadIncidentPhoto(
+            incId,
+            _imageBytes,
+            filename: _imageFile?.name ?? 'incident_.jpg',
+          );
         }
       }
 
@@ -176,7 +185,9 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
     return Stack(
       children: [
         Scaffold(
+          backgroundColor: CSAppColors.background,
           body: SafeArea(
+            bottom: false,
             child: Column(
               children: [
                 const CSScreenHeader(
@@ -185,11 +196,13 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                 ),
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 125),
                     children: [
                       const CSFormLabel('LOẠI SỰ CỐ'),
                       DropdownButtonFormField<String>(
                         initialValue: _category,
+                        dropdownColor: CSAppColors.surface,
+                        style: TextStyle(color: CSAppColors.textPrimary, fontSize: 13.5),
                         items: const [
                           DropdownMenuItem(value: 'seat_damage', child: Text('Ghế hỏng')),
                           DropdownMenuItem(value: 'equipment', child: Text('Lỗi thiết bị (máy chiếu, âm thanh...)')),
@@ -204,6 +217,8 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                       const CSFormLabel('PHÒNG / RẠP CHIẾU'),
                       DropdownButtonFormField<String>(
                         initialValue: _selectedRoomId,
+                        dropdownColor: CSAppColors.surface,
+                        style: TextStyle(color: CSAppColors.textPrimary, fontSize: 13.5),
                         items: const [
                           DropdownMenuItem(value: 'room1', child: Text('Phòng chiếu số 1')),
                           DropdownMenuItem(value: 'room2', child: Text('Phòng chiếu số 2')),
@@ -225,13 +240,14 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                                 decoration: BoxDecoration(
                                   color: CSAppColors.surfaceStrong,
                                   borderRadius: BorderRadius.circular(9),
+                                  border: Border.all(color: CSAppColors.border),
                                 ),
                                 child: Text(
                                   _seats.isNotEmpty
                                       ? _seats.join(', ')
                                       : 'Chưa chọn ghế nào',
                                   style: TextStyle(
-                                    color: _seats.isNotEmpty ? Colors.white : CSAppColors.muted,
+                                    color: _seats.isNotEmpty ? CSAppColors.textPrimary : CSAppColors.muted,
                                     fontWeight: _seats.isNotEmpty ? FontWeight.w600 : FontWeight.normal,
                                   ),
                                 ),
@@ -250,6 +266,7 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                       const CSFormLabel('TIÊU ĐỀ SỰ CỐ'),
                       TextFormField(
                         controller: _titleController,
+                        style: TextStyle(color: CSAppColors.textPrimary),
                         decoration: const InputDecoration(hintText: 'Nhập tiêu đề (bắt buộc)'),
                       ),
                       const SizedBox(height: 12),
@@ -257,6 +274,7 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                       TextFormField(
                         controller: _descController,
                         maxLines: 4,
+                        style: TextStyle(color: CSAppColors.textPrimary),
                         decoration: const InputDecoration(hintText: 'Nhập mô tả chi tiết'),
                       ),
                       const SizedBox(height: 12),
@@ -277,6 +295,11 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                                   foregroundColor: selected
                                       ? CSAppColors.danger
                                       : CSAppColors.muted,
+                                  side: BorderSide(
+                                    color: selected
+                                        ? CSAppColors.danger
+                                        : CSAppColors.border,
+                                  ),
                                 ),
                                 child: Text(
                                   labels[index],
@@ -331,8 +354,8 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                                 children: [
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.file(
-                                      _imageFile!,
+                                    child: Image.memory(
+                                      _imageBytes!,
                                       height: 180,
                                       width: double.infinity,
                                       fit: BoxFit.cover,
@@ -345,7 +368,10 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                                       foregroundColor: Colors.white,
                                     ),
                                     icon: const Icon(Icons.close, size: 18),
-                                    onPressed: () => setState(() => _imageFile = null),
+                                    onPressed: () => setState(() {
+                                      _imageFile = null;
+                                      _imageBytes = null;
+                                    }),
                                   ),
                                 ],
                               ),
@@ -356,7 +382,7 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                                   Expanded(
                                     child: Text(
                                       'Ảnh: ${_imageFile!.path.split(RegExp(r"[/\\]")).last}',
-                                      style: const TextStyle(color: CSAppColors.muted, fontSize: 11),
+                                      style: TextStyle(color: CSAppColors.muted, fontSize: 11),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -370,15 +396,12 @@ class _CSAddIncidentScreenState extends State<CSAddIncidentScreen> {
                             ],
                           ),
                         ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
+                      CSPrimaryButton(
+                        label: 'Tạo sự cố & bàn giao ca',
+                        onPressed: _submit,
+                      ),
                     ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: CSPrimaryButton(
-                    label: 'Tạo sự cố & bàn giao ca',
-                    onPressed: _submit,
                   ),
                 ),
               ],
@@ -408,7 +431,7 @@ class CSFormLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           color: CSAppColors.muted,
           fontSize: 10,
           fontWeight: FontWeight.w700,

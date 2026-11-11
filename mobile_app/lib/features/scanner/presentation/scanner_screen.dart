@@ -221,7 +221,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
       return;
     }
 
-    // Kiểm tra xem _activeShowId hiện tại có nằm trong danh sách hôm nay không
     final currentExists = _availableShowtimes.any(
       (s) =>
           '${s['show_id']}' == _activeShowId ||
@@ -230,8 +229,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
               '${s['show_id']}'.split('T')[1] == _activeShowId.split('T')[1]),
     );
 
-    // Nếu chưa chọn suất hoặc suất cũ không thuộc hôm nay,
-    // tự động khóa vào suất đang chiếu (suất đầu tiên sau khi đã sort)
     if (_activeShowId.isEmpty || !currentExists) {
       final topShow = _availableShowtimes.first;
       setState(() {
@@ -325,7 +322,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
               ? 'Đã bật chế độ tự động nhận diện cho ${_formatRoomName(_activeRoomId)}'
               : 'Đã khóa cổng soát: ${_formatRoomName(_activeRoomId)} · ${_formatTimeDisplay(_activeShowId)} ($movieTitle)',
         ),
-        backgroundColor: CSAppColors.surfaceStrong,
+        backgroundColor: CSAppColors.primary,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -350,9 +347,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.of(sheetCtx).size.height * 0.85,
               ),
-              decoration: const BoxDecoration(
-                color: Color(0xFF141824),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              decoration: BoxDecoration(
+                color: CSAppColors.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               ),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               child: Column(
@@ -365,7 +362,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 14),
                       decoration: BoxDecoration(
-                        color: Colors.white24,
+                        color: CSAppColors.border,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -373,18 +370,18 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Cấu hình cổng soát vé',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: CSAppColors.textPrimary,
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close,
-                          color: Colors.white70,
+                          color: CSAppColors.muted,
                           size: 20,
                         ),
                         onPressed: () => Navigator.pop(sheetCtx),
@@ -392,7 +389,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  const Text(
+                  Text(
                     'PHÒNG CHIẾU',
                     style: TextStyle(
                       fontSize: 11,
@@ -412,12 +409,15 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: isSelected ? Colors.white : Colors.white70,
+                            color: isSelected ? Colors.white : CSAppColors.textSecondary,
                           ),
                         ),
                         selected: isSelected,
                         selectedColor: CSAppColors.primary,
-                        backgroundColor: const Color(0xFF1F2638),
+                        backgroundColor: CSAppColors.surfaceStrong,
+                        side: BorderSide(
+                          color: isSelected ? CSAppColors.primary : CSAppColors.border,
+                        ),
                         onSelected: (val) {
                           if (val && _activeRoomId != r['id']) {
                             setState(() {
@@ -431,7 +431,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                     }).toList(),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'CHẾ ĐỘ SOÁT VÉ',
                     style: TextStyle(
                       fontSize: 11,
@@ -457,12 +457,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       decoration: BoxDecoration(
                         color: _isAutoMode
                             ? CSAppColors.primary.withValues(alpha: 0.15)
-                            : const Color(0xFF1B2234),
+                            : CSAppColors.surfaceStrong,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: _isAutoMode
                               ? CSAppColors.primary
-                              : Colors.white12,
+                              : CSAppColors.border,
                           width: _isAutoMode ? 1.5 : 1,
                         ),
                       ),
@@ -481,7 +481,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -490,10 +490,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
-                                    color: Colors.white,
+                                    color: CSAppColors.textPrimary,
                                   ),
                                 ),
-                                SizedBox(height: 3),
+                                const SizedBox(height: 3),
                                 Text(
                                   'Chấp nhận mọi vé đúng phòng, tự khớp theo suất trên vé',
                                   style: TextStyle(
@@ -517,7 +517,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      const Text(
+                      Text(
                         'HOẶC KHÓA THEO SUẤT CHIẾU HÔM NAY:',
                         style: TextStyle(
                           fontSize: 11,
@@ -548,13 +548,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.event_busy,
                                     color: CSAppColors.muted,
                                     size: 36,
                                   ),
                                   const SizedBox(height: 8),
-                                  const Text(
+                                  Text(
                                     'Không có suất chiếu nào hôm nay cho phòng này',
                                     style: TextStyle(
                                       color: CSAppColors.muted,
@@ -620,14 +620,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                           : isScreening
                                           ? const Color(0xFF10B981)
                                                 .withValues(alpha: 0.12)
-                                          : const Color(0xFF1A2132),
+                                          : CSAppColors.surfaceStrong,
                                       borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
                                         color: isCurrent
                                             ? CSAppColors.primary
                                             : isScreening
                                             ? const Color(0xFF10B981)
-                                            : Colors.white10,
+                                            : CSAppColors.border,
                                         width: (isCurrent || isScreening)
                                             ? 1.5
                                             : 1,
@@ -642,7 +642,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                           child: Container(
                                             width: 36,
                                             height: 48,
-                                            color: const Color(0xFF1F2638),
+                                            color: CSAppColors.border,
                                             child: posterUrl.isNotEmpty
                                                 ? Image.network(
                                                     posterUrl,
@@ -652,20 +652,19 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                                           context,
                                                           error,
                                                           stackTrace,
-                                                        ) => const Center(
+                                                        ) => Center(
                                                           child: Icon(
                                                             Icons
                                                                 .movie_outlined,
-                                                            color:
-                                                                Colors.white38,
+                                                            color: CSAppColors.muted,
                                                             size: 18,
                                                           ),
                                                         ),
                                                   )
-                                                : const Center(
+                                                : Center(
                                                     child: Icon(
                                                       Icons.movie_outlined,
-                                                      color: Colors.white38,
+                                                      color: CSAppColors.muted,
                                                       size: 18,
                                                     ),
                                                   ),
@@ -682,7 +681,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                                 ? CSAppColors.primary
                                                 : isScreening
                                                 ? const Color(0xFF10B981)
-                                                : const Color(0xFF283248),
+                                                : CSAppColors.border,
                                             borderRadius: BorderRadius.circular(
                                               6,
                                             ),
@@ -693,8 +692,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                                 : showId.split('T').last,
                                             style: TextStyle(
                                               color: (isCurrent || isScreening)
-                                                  ? Colors.black
-                                                  : Colors.white,
+                                                  ? Colors.white
+                                                  : CSAppColors.textPrimary,
                                               fontWeight: FontWeight.bold,
                                               fontSize: 13,
                                             ),
@@ -714,11 +713,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                                       maxLines: 1,
                                                       overflow:
                                                           TextOverflow.ellipsis,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontWeight:
                                                             FontWeight.w600,
                                                         fontSize: 13,
-                                                        color: Colors.white,
+                                                        color: CSAppColors.textPrimary,
                                                       ),
                                                     ),
                                                   ),
@@ -799,13 +798,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                                             vertical: 2,
                                                           ),
                                                       decoration: BoxDecoration(
-                                                        color: Colors.white10,
+                                                        color: CSAppColors.border,
                                                         borderRadius:
                                                             BorderRadius.circular(
                                                               4,
                                                             ),
                                                       ),
-                                                      child: const Text(
+                                                      child: Text(
                                                         'Đã kết thúc',
                                                         style: TextStyle(
                                                           fontSize: 9,
@@ -824,7 +823,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                                 endTime.isNotEmpty
                                                     ? 'Khung giờ: $startTime - $endTime'
                                                     : 'Mã suất: $showId',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 11,
                                                   color: CSAppColors.muted,
                                                 ),
@@ -1160,19 +1159,23 @@ class _ScannerScreenState extends State<ScannerScreen> {
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
-              decoration: const BoxDecoration(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 126),
+              decoration: BoxDecoration(
                 color: CSAppColors.background,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     'Đưa mã QR vào khung hình',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.bold,
+                      color: CSAppColors.textPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   CSAppCard(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1182,7 +1185,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           label: 'Đã soát',
                           color: CSAppColors.primary,
                         ),
-                        Container(width: 1, height: 30, color: Colors.white24),
+                        Container(width: 1, height: 30, color: CSAppColors.border),
                         _StatItem(
                           value: '${_movie.capacity}',
                           label: 'Tổng vé',
@@ -1190,7 +1193,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -1209,9 +1212,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       icon: const Icon(Icons.history, size: 18),
                       label: const Text('Lịch sử quét vé'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white24),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        foregroundColor: CSAppColors.textPrimary,
+                        backgroundColor: CSAppColors.surface,
+                        side: BorderSide(color: CSAppColors.border),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -1231,22 +1238,29 @@ class _ScannerOverlay extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double width = constraints.maxWidth;
-        final double scanArea = width * 0.7;
+        final double scanArea = width * 0.66;
 
         return Stack(
           children: [
             Container(
               decoration: ShapeDecoration(
-                shape: _ScannerHoleShape(holeSize: Size(scanArea, scanArea)),
+                shape: _ScannerHoleShape(
+                  holeSize: Size(scanArea, scanArea),
+                  verticalOffset: -52,
+                ),
               ),
             ),
-            Center(
-              child: Container(
-                width: scanArea,
-                height: scanArea,
-                decoration: BoxDecoration(
-                  border: Border.all(color: CSAppColors.primary, width: 2),
-                  borderRadius: BorderRadius.circular(12),
+            Align(
+              alignment: Alignment.center,
+              child: Transform.translate(
+                offset: const Offset(0, -52),
+                child: Container(
+                  width: scanArea,
+                  height: scanArea,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: CSAppColors.primary, width: 2.2),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
               ),
             ),
@@ -1259,8 +1273,12 @@ class _ScannerOverlay extends StatelessWidget {
 
 class _ScannerHoleShape extends ShapeBorder {
   final Size holeSize;
+  final double verticalOffset;
 
-  const _ScannerHoleShape({required this.holeSize});
+  const _ScannerHoleShape({
+    required this.holeSize,
+    this.verticalOffset = 0,
+  });
 
   @override
   EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
@@ -1271,13 +1289,13 @@ class _ScannerHoleShape extends ShapeBorder {
   @override
   Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
     final holeRect = Rect.fromCenter(
-      center: rect.center,
+      center: rect.center.translate(0, verticalOffset),
       width: holeSize.width,
       height: holeSize.height,
     );
     return Path()
       ..addRect(rect)
-      ..addRRect(RRect.fromRectAndRadius(holeRect, const Radius.circular(12)))
+      ..addRRect(RRect.fromRectAndRadius(holeRect, const Radius.circular(14)))
       ..fillType = PathFillType.evenOdd;
   }
 
@@ -1309,12 +1327,12 @@ class _StatItem extends StatelessWidget {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: color ?? Colors.white,
+            color: color ?? CSAppColors.textPrimary,
           ),
         ),
         Text(
           label,
-          style: const TextStyle(fontSize: 12, color: CSAppColors.muted),
+          style: TextStyle(fontSize: 12, color: CSAppColors.muted),
         ),
       ],
     );

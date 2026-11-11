@@ -19,7 +19,7 @@ def main():
     print(f" API Server: {args.endpoint}")
     print(f"=======================================")
 
-        source_val = 0 if args.source == "0" else args.source
+    source_val = 0 if args.source == "0" else args.source
     cap = cv2.VideoCapture(source_val)
     if not cap.isOpened():
         print("[LỖI] Không thể mở webcam. Vui lòng kiểm tra lại thiết bị!")

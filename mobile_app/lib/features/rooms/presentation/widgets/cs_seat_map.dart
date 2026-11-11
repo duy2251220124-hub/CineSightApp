@@ -43,12 +43,25 @@ class CSSeatMap extends StatelessWidget {
     return false;
   }
 
+  bool _isEmptySeat(String seat) {
+    if (_hasSeat(ignoredSeats, seat)) {
+      return !(_hasSeat(occupiedSeats, seat) || _hasSeat(warningSeats, seat));
+    }
+    if (selectionMode && _hasSeat(selectedSeats, seat)) return false;
+    if (_hasSeat(brokenSeats, seat) || _hasSeat(reportedSeats, seat)) {
+      return false;
+    }
+    if (showWarnings && _hasSeat(warningSeats, seat)) return false;
+    if (_hasSeat(occupiedSeats, seat)) return false;
+    return true;
+  }
+
   Color _seatColor(String seat) {
     if (_hasSeat(ignoredSeats, seat)) {
       if (_hasSeat(occupiedSeats, seat) || _hasSeat(warningSeats, seat)) {
         return CSAppColors.primary;
       }
-      return CSAppColors.surfaceStrong;
+      return CSAppColors.seatEmpty;
     }
 
     if (selectionMode && _hasSeat(selectedSeats, seat)) {
@@ -70,7 +83,7 @@ class CSSeatMap extends StatelessWidget {
       return CSAppColors.primary;
     }
 
-    return CSAppColors.surfaceStrong;
+    return CSAppColors.seatEmpty;
   }
 
   static const Map<String, int> rowSeatCounts = {
@@ -90,6 +103,7 @@ class CSSeatMap extends StatelessWidget {
 
   Widget _buildSeatTile(String seat) {
     final isSelected = selectionMode && _hasSeat(selectedSeats, seat);
+    final isEmpty = _isEmptySeat(seat);
     return GestureDetector(
       onTap: onSeatTapped != null ? () => onSeatTapped!(seat) : null,
       child: AnimatedContainer(
@@ -102,16 +116,32 @@ class CSSeatMap extends StatelessWidget {
           color: _seatColor(seat),
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
-            color: isSelected ? Colors.white : CSAppColors.border,
+            color: isSelected ? CSAppColors.primary : CSAppColors.border,
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Text(
           seat,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 8,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: isEmpty ? CSAppColors.seatEmptyText : Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRowLabel(String row) {
+    return SizedBox(
+      width: 20.0,
+      child: Center(
+        child: Text(
+          row,
+          style: TextStyle(
+            color: CSAppColors.muted,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
@@ -119,44 +149,18 @@ class CSSeatMap extends StatelessWidget {
   }
 
   Widget _buildRow(String row, double slotW) {
-    const labelW = 20.0;
-
     if (row == 'A') {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 2.5),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: labelW,
-              child: Center(
-                child: Text(
-                  'A',
-                  style: TextStyle(
-                    color: CSAppColors.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
+            _buildRowLabel('A'),
             SizedBox(width: slotW), // Col 1 (spacer for L1)
             SizedBox(width: slotW), // Col 2 (spacer for seat 1)
             for (int i = 8; i >= 1; i--) _buildSeatTile('A$i'), // Cols 3-10
             SizedBox(width: slotW * 6), // Cols 11-16
-            const SizedBox(
-              width: labelW,
-              child: Center(
-                child: Text(
-                  'A',
-                  style: TextStyle(
-                    color: CSAppColors.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
+            _buildRowLabel('A'),
           ],
         ),
       );
@@ -168,19 +172,7 @@ class CSSeatMap extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: labelW,
-              child: Center(
-                child: Text(
-                  'K',
-                  style: TextStyle(
-                    color: CSAppColors.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
+            _buildRowLabel('K'),
             SizedBox(width: slotW), // Col 1 (spacer for L1)
             for (int i = 13; i >= 3; i--) _buildSeatTile('K$i'), // Cols 2-12
             SizedBox(
@@ -188,19 +180,7 @@ class CSSeatMap extends StatelessWidget {
             ), // Cols 13-14 (ô trống thẳng hàng L4, L3 - BỎ LỐI ĐI)
             _buildSeatTile('K2'), // Col 15
             _buildSeatTile('K1'), // Col 16
-            const SizedBox(
-              width: labelW,
-              child: Center(
-                child: Text(
-                  'K',
-                  style: TextStyle(
-                    color: CSAppColors.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
+            _buildRowLabel('K'),
           ],
         ),
       );
@@ -212,34 +192,9 @@ class CSSeatMap extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: labelW,
-              child: Center(
-                child: Text(
-                  'L',
-                  style: TextStyle(
-                    color: CSAppColors.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            // 16 ghế liền mạch, không có khoảng cách thừa giữa L12 và L13
+            _buildRowLabel('L'),
             for (int i = 16; i >= 1; i--) _buildSeatTile('L$i'),
-            const SizedBox(
-              width: labelW,
-              child: Center(
-                child: Text(
-                  'L',
-                  style: TextStyle(
-                    color: CSAppColors.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
+            _buildRowLabel('L'),
           ],
         ),
       );
@@ -251,43 +206,17 @@ class CSSeatMap extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: labelW,
-            child: Center(
-              child: Text(
-                row,
-                style: const TextStyle(
-                  color: CSAppColors.muted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+          _buildRowLabel(row),
           SizedBox(width: slotW), // Col 1 (spacer for L1)
           for (int i = 11; i >= 1; i--) _buildSeatTile('$row$i'), // Cols 2-12
           SizedBox(width: slotW * 4), // Cols 13-16 (spacers)
-          SizedBox(
-            width: labelW,
-            child: Center(
-              child: Text(
-                row,
-                style: const TextStyle(
-                  color: CSAppColors.muted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+          _buildRowLabel(row),
         ],
       ),
     );
   }
 
-
   Widget _buildRoom3Row(String row, double slotW) {
-    const labelW = 20.0;
     final int count = (row == 'A') ? 10 : ((row == 'J') ? 18 : 13);
     final int leftSpacers = (row == 'A') ? 4 : ((row == 'J') ? 0 : 2);
     final int rightSpacers = (row == 'A') ? 4 : ((row == 'J') ? 0 : 3);
@@ -297,35 +226,11 @@ class CSSeatMap extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: labelW,
-            child: Center(
-              child: Text(
-                row,
-                style: const TextStyle(
-                  color: CSAppColors.muted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+          _buildRowLabel(row),
           if (leftSpacers > 0) SizedBox(width: slotW * leftSpacers),
           for (int i = 1; i <= count; i++) _buildSeatTile('$row$i'),
           if (rightSpacers > 0) SizedBox(width: slotW * rightSpacers),
-          SizedBox(
-            width: labelW,
-            child: Center(
-              child: Text(
-                row,
-                style: const TextStyle(
-                  color: CSAppColors.muted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+          _buildRowLabel(row),
         ],
       ),
     );
@@ -333,7 +238,8 @@ class CSSeatMap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isRoom3 = roomId.toLowerCase().contains('room3') || roomId.contains('3');
+    final isRoom3 =
+        roomId.toLowerCase().contains('room3') || roomId.contains('3');
     final rows = isRoom3
         ? ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
         : ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
@@ -355,8 +261,8 @@ class CSSeatMap extends StatelessWidget {
           ),
         ),
         Text(
-          isRoom3 ? 'MÀN HÌNH / SCREEN (132 GHẾ · PHÒNG CHIẾU SỐ 3)' : 'MÀN HÌNH / SCREEN (136 GHẾ CHUẨN CAMERA)',
-          style: const TextStyle(
+          'MÀN HÌNH CHIẾU / SCREEN',
+          style: TextStyle(
             color: CSAppColors.muted,
             fontSize: 9,
             fontWeight: FontWeight.bold,
@@ -375,8 +281,8 @@ class CSSeatMap extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: const [
+                      const Row(
+                        children: [
                           Icon(
                             Icons.subdirectory_arrow_right,
                             size: 15,
@@ -394,7 +300,7 @@ class CSSeatMap extends StatelessWidget {
                         ],
                       ),
                       Row(
-                        children: const [
+                        children: [
                           Text(
                             'LỐI RA',
                             style: TextStyle(
@@ -403,7 +309,7 @@ class CSSeatMap extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          SizedBox(width: 4),
+                          const SizedBox(width: 4),
                           Icon(
                             Icons.north_east,
                             size: 15,
@@ -415,7 +321,11 @@ class CSSeatMap extends StatelessWidget {
                   ),
                 ),
               ),
-              ...rows.map((row) => isRoom3 ? _buildRoom3Row(row, slotW) : _buildRow(row, slotW)),
+              ...rows.map(
+                (row) => isRoom3
+                    ? _buildRoom3Row(row, slotW)
+                    : _buildRow(row, slotW),
+              ),
             ],
           ),
         ),
@@ -448,7 +358,7 @@ class CSLegendItem extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(color: CSAppColors.muted, fontSize: 10),
+          style: TextStyle(color: CSAppColors.muted, fontSize: 10),
         ),
       ],
     );

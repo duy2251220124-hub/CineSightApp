@@ -121,10 +121,12 @@ def init_db():
         )
     """)
     for idx in range(1, 5):
+        seats_cnt = 132 if idx == 3 else 136
         cursor.execute(
-            "INSERT OR IGNORE INTO rooms (id, name, total_seats, screen_type, is_active, created_at) VALUES (?, ?, 136, '2D Standard', 1, ?)",
-            (f"room{idx}", f"Phòng chiếu {idx}", now_iso),
+            "INSERT OR IGNORE INTO rooms (id, name, total_seats, screen_type, is_active, created_at) VALUES (?, ?, ?, '2D Standard', 1, ?)",
+            (f"room{idx}", f"Phòng chiếu {idx}", seats_cnt, now_iso),
         )
+    cursor.execute("UPDATE rooms SET total_seats = 132 WHERE id = 'room3' AND total_seats != 132")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS movies (

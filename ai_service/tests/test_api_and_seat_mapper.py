@@ -203,7 +203,7 @@ class TestApiAndStrictRules(unittest.TestCase):
         conn = sqlite3.connect(DB_PATH)
         try:
             row = conn.execute(
-                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' LIMIT 1"
+                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' ORDER BY end_at DESC LIMIT 1"
             ).fetchone()
         finally:
             conn.close()
@@ -374,7 +374,7 @@ class TestApiAndStrictRules(unittest.TestCase):
         conn = sqlite3.connect(DB_PATH)
         try:
             row = conn.execute(
-                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' LIMIT 1"
+                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' ORDER BY end_at DESC LIMIT 1"
             ).fetchone()
         finally:
             conn.close()
@@ -435,7 +435,7 @@ class TestApiAndStrictRules(unittest.TestCase):
         conn = sqlite3.connect(DB_PATH)
         try:
             row = conn.execute(
-                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' LIMIT 1"
+                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' ORDER BY end_at DESC LIMIT 1"
             ).fetchone()
             self.assertIsNotNone(row)
             valid_room, valid_show = row[0], row[1]
@@ -495,7 +495,7 @@ class TestApiAndStrictRules(unittest.TestCase):
         conn = sqlite3.connect(DB_PATH)
         try:
             row = conn.execute(
-                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' LIMIT 1"
+                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' ORDER BY end_at DESC LIMIT 1"
             ).fetchone()
             self.assertIsNotNone(row)
             valid_room, valid_show = row[0], row[1]

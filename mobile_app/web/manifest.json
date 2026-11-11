@@ -1,11 +1,12 @@
 {
-    "name": "mobile_app",
-    "short_name": "mobile_app",
-    "start_url": ".",
+    "name": "CineSight - Soát Vé Rạp Chiếu Phim",
+    "short_name": "CineSight",
+    "start_url": "./",
+    "scope": "./",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F172A",
+    "theme_color": "#1E3A8A",
+    "description": "Hệ thống soát vé và kiểm đếm khán giả rạp chiếu phim CineSight",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

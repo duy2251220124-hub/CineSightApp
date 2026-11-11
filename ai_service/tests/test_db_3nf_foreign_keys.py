@@ -71,8 +71,10 @@ class TestDatabase3NFAndForeignKeys(unittest.TestCase):
             for tbl in ("showtimes", "tickets", "alerts", "incidents"):
                 fks = conn.execute(f"PRAGMA foreign_key_list({tbl})").fetchall()
                 self.assertGreaterEqual(len(fks), 2, f"Bảng {tbl} thiếu Khóa Ngoại")
+
             violations = conn.execute("PRAGMA foreign_key_check").fetchall()
             self.assertEqual(violations, [], f"Có vi phạm Khóa Ngoại: {violations}")
+            
         finally:
             conn.close()
 

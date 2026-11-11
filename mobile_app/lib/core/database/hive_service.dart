@@ -56,6 +56,15 @@ class HiveService {
   /// URL máy chủ mặc định (fallback khi chưa lưu cấu hình)
   static const String defaultServerUrl = 'https://quill-device-deny.ngrok-free.dev';
 
+  /// Trạng thái chế độ Sáng (Light Mode = true) / Tối (Dark Mode = false)
+  static final ValueNotifier<bool> lightModeNotifier = ValueNotifier<bool>(true);
+
+  /// Bộ đếm phiên bản ảnh đại diện để cập nhật tức thì giữa các màn hình
+  static final ValueNotifier<int> avatarRevision = ValueNotifier<int>(0);
+
+  /// Kiểm tra hiện tại đang ở Light Mode hay không
+  static bool get isLightMode => lightModeNotifier.value;
+
   /// Khởi tạo Hive Database (Chạy 1 lần duy nhất khi mở App)
   static Future<void> init() async {
     // Khởi tạo engine lưu trữ trên điện thoại
@@ -64,7 +73,23 @@ class HiveService {
     // Mở các "Hộp" để chứa dữ liệu
     await Hive.openBox<String>(_ticketBoxName);
     await Hive.openBox<String>(_historyBoxName);
-    await Hive.openBox<String>(_settingsBoxName);
+    final settingsBox = await Hive.openBox<String>(_settingsBoxName);
+    final savedTheme = settingsBox.get('is_light_mode');
+    lightModeNotifier.value = savedTheme == null ? true : (savedTheme == 'true');
+  }
+
+  /// Chuyển đổi chế độ Sáng (true) / Tối (false) và lưu vào bộ nhớ máy
+  static Future<void> setLightMode(bool isLight) async {
+    lightModeNotifier.value = isLight;
+    try {
+      if (!Hive.isBoxOpen(_settingsBoxName)) {
+        await Hive.openBox<String>(_settingsBoxName);
+      }
+      final box = Hive.box<String>(_settingsBoxName);
+      await box.put('is_light_mode', isLight ? 'true' : 'false');
+    } catch (e) {
+      debugPrint('[HIVE] Error setting light mode: $e');
+    }
   }
 
   /// Lấy địa chỉ máy chủ hiện tại
@@ -97,6 +122,41 @@ class HiveService {
       debugPrint('[HIVE] Đã lưu Server URL mới: $clean');
     } catch (e) {
       debugPrint('[HIVE] Error setting server url: $e');
+    }
+  }
+
+  /// Lấy ảnh đại diện (Base64) đã lưu của nhân viên
+  static String? getEmployeeAvatar(String userKey) {
+    try {
+      if (!Hive.isBoxOpen(_settingsBoxName)) return null;
+      final box = Hive.box<String>(_settingsBoxName);
+      final cleanKey = 'avatar_${userKey.trim().toLowerCase()}';
+      final saved = box.get(cleanKey);
+      if (saved != null && saved.trim().isNotEmpty) {
+        return saved.trim();
+      }
+    } catch (e) {
+      debugPrint('[HIVE] Error getting avatar: $e');
+    }
+    return null;
+  }
+
+  /// Lưu hoặc xóa ảnh đại diện (Base64) của nhân viên
+  static Future<void> setEmployeeAvatar(String userKey, String? base64Data) async {
+    try {
+      if (!Hive.isBoxOpen(_settingsBoxName)) {
+        await Hive.openBox<String>(_settingsBoxName);
+      }
+      final box = Hive.box<String>(_settingsBoxName);
+      final cleanKey = 'avatar_${userKey.trim().toLowerCase()}';
+      if (base64Data == null || base64Data.trim().isEmpty) {
+        await box.delete(cleanKey);
+      } else {
+        await box.put(cleanKey, base64Data.trim());
+      }
+      avatarRevision.value++;
+    } catch (e) {
+      debugPrint('[HIVE] Error setting avatar: $e');
     }
   }
 

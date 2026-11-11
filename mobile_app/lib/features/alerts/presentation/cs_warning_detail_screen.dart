@@ -50,7 +50,9 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
     final show = alert['show_id']?.toString() ?? 'N/A';
 
     return Scaffold(
+      backgroundColor: CSAppColors.background,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             const CSScreenHeader(
@@ -59,7 +61,7 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 125),
                 children: [
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -87,7 +89,7 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                               const SizedBox(height: 3),
                               Text(
                                 'Mã cảnh báo: #${widget.alertId}',
-                                style: const TextStyle(color: CSAppColors.muted, fontSize: 11),
+                                style: TextStyle(color: CSAppColors.muted, fontSize: 11),
                               ),
                             ],
                           ),
@@ -100,7 +102,7 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'THÔNG TIN VI PHẠM',
                           style: TextStyle(
                             fontSize: 11,
@@ -131,7 +133,7 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'HƯỚNG DẪN XỬ LÝ',
                           style: TextStyle(
                             fontSize: 11,
@@ -143,7 +145,11 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                         const SizedBox(height: 8),
                         Text(
                           desc,
-                          style: const TextStyle(fontSize: 12, height: 1.4),
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.4,
+                            color: CSAppColors.textPrimary,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -159,53 +165,47 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 18),
+                  CSPrimaryButton(
+                    label: _isResolving ? 'Đang cập nhật...' : 'Xác nhận đã xử lý vi phạm',
+                    icon: Icons.check_circle_outline,
+                    onPressed: _isResolving
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final navigator = Navigator.of(context);
+                            setState(() => _isResolving = true);
+                            final roomId = alert['room_id']?.toString();
+                            final showId = alert['show_id']?.toString();
+                            bool success = false;
+                            if (roomId != null && showId != null && roomId.isNotEmpty && showId.isNotEmpty) {
+                              success = await ApiClient.resolveRoomAlerts(roomId, showId);
+                            }
+                            if (!success) {
+                              success = await ApiClient.resolveAlert(widget.alertId);
+                            }
+                            if (!mounted) return;
+                            setState(() => _isResolving = false);
+                            if (success) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Đã đánh dấu xử lý vi phạm thành công!'),
+                                  backgroundColor: CSAppColors.success,
+                                ),
+                              );
+                              widget.onResolved?.call();
+                              navigator.pop(true);
+                            } else {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Không thể cập nhật, vui lòng thử lại!'),
+                                  backgroundColor: CSAppColors.danger,
+                                ),
+                              );
+                            }
+                          },
+                  ),
                 ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                color: CSAppColors.surface,
-                border: Border(top: BorderSide(color: CSAppColors.border)),
-              ),
-              child: CSPrimaryButton(
-                label: _isResolving ? 'Đang cập nhật...' : 'Xác nhận đã xử lý vi phạm',
-                icon: Icons.check_circle_outline,
-                onPressed: _isResolving
-                    ? null
-                    : () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final navigator = Navigator.of(context);
-                        setState(() => _isResolving = true);
-                        final roomId = alert['room_id']?.toString();
-                        final showId = alert['show_id']?.toString();
-                        bool success = false;
-                        if (roomId != null && showId != null && roomId.isNotEmpty && showId.isNotEmpty) {
-                          success = await ApiClient.resolveRoomAlerts(roomId, showId);
-                        }
-                        if (!success) {
-                          success = await ApiClient.resolveAlert(widget.alertId);
-                        }
-                        if (!mounted) return;
-                        setState(() => _isResolving = false);
-                        if (success) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Đã đánh dấu xử lý vi phạm thành công!'),
-                              backgroundColor: CSAppColors.success,
-                            ),
-                          );
-                          widget.onResolved?.call();
-                          navigator.pop(true);
-                        } else {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Không thể cập nhật, vui lòng thử lại!'),
-                              backgroundColor: CSAppColors.danger,
-                            ),
-                          );
-                        }
-                      },
               ),
             ),
           ],
@@ -218,13 +218,16 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: CSAppColors.muted, fontSize: 13)),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            color: highlightColor ?? Colors.white,
-            fontSize: isBold ? 15 : 13,
+        Text(label, style: TextStyle(color: CSAppColors.muted, fontSize: 13)),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: highlightColor ?? CSAppColors.textPrimary,
+              fontSize: isBold ? 15 : 13,
+            ),
           ),
         ),
       ],

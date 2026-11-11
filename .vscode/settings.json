@@ -1,3 +1,26 @@
 {
-    "python.defaultInterpreterPath":  "ai_service\\venv\\Scripts\\python.exe"
+    "python.defaultInterpreterPath": "${workspaceFolder}/ai_service/venv/Scripts/python.exe",
+    "python.analysis.exclude": [
+        "**/mobile_app/**",
+        "**/web_admin/**",
+        "**/ai_service/venv/**",
+        "**/node_modules/**",
+        "**/build/**",
+        "**/.dart_tool/**",
+        "**/dist/**",
+        "**/.git/**"
+    ],
+    "python.analysis.ignore": [
+        "**/mobile_app/**",
+        "**/web_admin/**",
+        "**/ai_service/venv/**"
+    ],
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/**": true,
+        "**/mobile_app/build/**": true,
+        "**/mobile_app/.dart_tool/**": true,
+        "**/ai_service/venv/**": true
+    }
 }

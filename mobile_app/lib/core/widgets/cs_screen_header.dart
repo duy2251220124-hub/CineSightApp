@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import 'package:mobile_app/theme/app_theme.dart';
 
 class CSScreenHeader extends StatelessWidget {
@@ -29,25 +28,29 @@ class CSScreenHeader extends StatelessWidget {
           if (showBack)
             IconButton(
               onPressed: onBack ?? () => Navigator.maybePop(context),
-              icon: const Icon(Icons.chevron_left),
-              style: IconButton.styleFrom(backgroundColor: CSAppColors.surface),
+              icon: Icon(Icons.chevron_left, color: CSAppColors.textPrimary),
+              style: IconButton.styleFrom(
+                backgroundColor: CSAppColors.surface,
+                side: BorderSide(color: CSAppColors.border),
+              ),
             ),
-          if (showBack) const SizedBox(width: 4),
+          if (showBack) const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
+                    color: CSAppColors.textPrimary,
                   ),
                 ),
                 if (subtitle != null)
                   Text(
                     subtitle!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: CSAppColors.muted,
                       fontSize: 11,
                     ),
@@ -58,8 +61,11 @@ class CSScreenHeader extends StatelessWidget {
           if (trailingIcon != null)
             IconButton(
               onPressed: onTrailing,
-              icon: Icon(trailingIcon, size: 19),
-              style: IconButton.styleFrom(backgroundColor: CSAppColors.surface),
+              icon: Icon(trailingIcon, size: 19, color: CSAppColors.textPrimary),
+              style: IconButton.styleFrom(
+                backgroundColor: CSAppColors.surface,
+                side: BorderSide(color: CSAppColors.border),
+              ),
             ),
         ],
       ),

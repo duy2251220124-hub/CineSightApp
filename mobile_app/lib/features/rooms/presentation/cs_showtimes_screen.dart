@@ -167,7 +167,6 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
     final isCustomDate = !isYesterday && !isToday && !isTomorrow;
 
     final filtered = _showtimes.where((s) {
-      // Đảm bảo chỉ hiển thị đúng ngày đang chọn
       final itemDate =
           (s['date'] ?? (s['show_id']?.toString().split('T').first ?? ''))
               .toString();
@@ -186,7 +185,6 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
       return true;
     }).toList();
 
-    // Nếu đang xem ngày hôm nay: Ưu tiên suất phim đang chiếu lên đầu danh sách
     if (isToday) {
       filtered.sort((a, b) {
         final pA = _getShowtimePriority(a, now);
@@ -207,7 +205,9 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
     ];
 
     return Scaffold(
+      backgroundColor: CSAppColors.background,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             CSScreenHeader(
@@ -238,6 +238,11 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                       selected: isYesterday,
                       selectedColor: CSAppColors.primary,
                       backgroundColor: CSAppColors.surface,
+                      side: BorderSide(
+                        color: isYesterday
+                            ? CSAppColors.primary
+                            : CSAppColors.border,
+                      ),
                       onSelected: (_) => _selectDate(yesterday),
                     ),
                     const SizedBox(width: 6),
@@ -253,6 +258,11 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                       selected: isToday,
                       selectedColor: CSAppColors.primary,
                       backgroundColor: CSAppColors.surface,
+                      side: BorderSide(
+                        color: isToday
+                            ? CSAppColors.primary
+                            : CSAppColors.border,
+                      ),
                       onSelected: (_) => _selectDate(today),
                     ),
                     const SizedBox(width: 6),
@@ -268,6 +278,11 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                       selected: isTomorrow,
                       selectedColor: CSAppColors.primary,
                       backgroundColor: CSAppColors.surface,
+                      side: BorderSide(
+                        color: isTomorrow
+                            ? CSAppColors.primary
+                            : CSAppColors.border,
+                      ),
                       onSelected: (_) => _selectDate(tomorrow),
                     ),
                     const SizedBox(width: 6),
@@ -294,6 +309,11 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                       backgroundColor: isCustomDate
                           ? CSAppColors.primary
                           : CSAppColors.surface,
+                      side: BorderSide(
+                        color: isCustomDate
+                            ? CSAppColors.primary
+                            : CSAppColors.border,
+                      ),
                       onPressed: _pickCustomDate,
                     ),
                   ],
@@ -306,8 +326,9 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: TextField(
                 onChanged: (val) => setState(() => _searchQuery = val),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
+                style: TextStyle(color: CSAppColors.textPrimary, fontSize: 13.5),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.search, color: CSAppColors.muted),
                   hintText: 'Tìm theo tên phim hoặc giờ chiếu...',
                   isDense: true,
                 ),
@@ -336,6 +357,11 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                     selected: isSelected,
                     selectedColor: CSAppColors.primary,
                     backgroundColor: CSAppColors.surface,
+                    side: BorderSide(
+                      color: isSelected
+                          ? CSAppColors.primary
+                          : CSAppColors.border,
+                    ),
                     onSelected: (_) =>
                         setState(() => _selectedRoomFilter = f['id']!),
                   );
@@ -353,7 +379,7 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.event_busy_outlined,
                               size: 48,
                               color: CSAppColors.muted,
@@ -361,7 +387,7 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                             const SizedBox(height: 12),
                             Text(
                               'Không có suất chiếu nào trong ${_formatDisplayDate(_selectedDate).toLowerCase()}.',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: CSAppColors.muted,
                                 fontSize: 13,
                               ),
@@ -386,7 +412,7 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                   : RefreshIndicator(
                       onRefresh: _loadShowtimes,
                       child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 125),
                         itemCount: filtered.length,
                         itemBuilder: (context, index) {
                           final s = filtered[index];
@@ -402,10 +428,6 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                           final duration =
                               (s['duration_minutes'] as int?) ?? 105;
                           final breakMins = (s['break_minutes'] as int?) ?? 15;
-                          final showId =
-                              s['show_id']?.toString() ??
-                              s['id']?.toString() ??
-                              '';
 
                           final isScreening =
                               isToday && _getShowtimePriority(s, now) == 0;
@@ -430,7 +452,7 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                                     child: Container(
                                       width: 58,
                                       height: 84,
-                                      color: const Color(0xFF1F2638),
+                                      color: CSAppColors.surfaceStrong,
                                       child: posterUrl.isNotEmpty
                                           ? Image.network(
                                               posterUrl,
@@ -440,18 +462,18 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                                                     context,
                                                     error,
                                                     stackTrace,
-                                                  ) => const Center(
+                                                  ) => Center(
                                                     child: Icon(
                                                       Icons.movie_outlined,
-                                                      color: Colors.white38,
+                                                      color: CSAppColors.muted,
                                                       size: 26,
                                                     ),
                                                   ),
                                             )
-                                          : const Center(
+                                          : Center(
                                               child: Icon(
                                                 Icons.movie_outlined,
-                                                color: Colors.white38,
+                                                color: CSAppColors.muted,
                                                 size: 26,
                                               ),
                                             ),
@@ -474,10 +496,10 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                                                 movieName,
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.bold,
-                                                  color: Colors.white,
+                                                  color: CSAppColors.textPrimary,
                                                 ),
                                               ),
                                             ),
@@ -495,7 +517,7 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                                         const SizedBox(height: 6),
                                         Text(
                                           "$roomName · ${_formatDuration(duration)}",
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             color: CSAppColors.muted,
                                             fontSize: 11.5,
                                           ),
@@ -507,18 +529,18 @@ class _CSShowtimesScreenState extends State<CSShowtimesScreen> {
                                               child: Text(
                                                 isScreening
                                                     ? "Giờ: $startTime - $endTime · Nghỉ: ${breakMins}p"
-                                                    : "Mã: $showId · Nghỉ chuyển: ${breakMins}p",
-                                                style: const TextStyle(
+                                                    : "Giờ chiếu: $startTime - $endTime",
+                                                style: TextStyle(
                                                   color: CSAppColors.muted,
                                                   fontSize: 10,
                                                 ),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            const Icon(
+                                            Icon(
                                               Icons.chevron_right,
                                               size: 18,
-                                              color: Colors.white38,
+                                              color: CSAppColors.muted,
                                             ),
                                           ],
                                         ),

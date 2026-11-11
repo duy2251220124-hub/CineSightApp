@@ -3,7 +3,6 @@ import 'package:mobile_app/core/network/api_client.dart';
 import 'package:mobile_app/core/utils/room_utils.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 import 'package:mobile_app/core/widgets/cs_app_card.dart';
-import 'package:mobile_app/core/widgets/cs_primary_button.dart';
 import 'package:mobile_app/core/widgets/cs_screen_header.dart';
 
 class CSRoomsScreen extends StatefulWidget {
@@ -34,6 +33,7 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
   ];
 
   Future<void> _loadRooms() async {
+    setState(() => _isLoading = true);
     final rooms = await ApiClient.fetchRooms();
     if (mounted) {
       setState(() {
@@ -46,95 +46,114 @@ class _CSRoomsScreenState extends State<CSRoomsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: CSAppColors.background,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            const CSScreenHeader(
+            CSScreenHeader(
               title: 'Chọn phòng chiếu',
-              subtitle: '4 phòng chiếu (Phòng 1, 2, 4: 136 ghế · Phòng 3: 132 ghế)',
-              trailingIcon: Icons.notifications_none,
+              subtitle: 'Chạm vào phòng chiếu để xem sơ đồ ghế trực tiếp',
+              trailingIcon: Icons.refresh,
+              onTrailing: _loadRooms,
             ),
             Expanded(
-              child: _isLoading 
-                ? const Center(child: CircularProgressIndicator()) 
-                : ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                itemCount: _rooms.length,
-                itemBuilder: (context, index) {
-                  final room = _rooms[index];
-                  final rawRoomId = (room['room_id'] ?? 'room1').toString();
-                  final roomName = formatRoomName(room['name']?.toString() ?? rawRoomId);
-                  final seats = room['total_seats'] ?? 136;
-                  final status = room['is_calibrated'] == true ? 'Đã hiệu chuẩn' : 'Chưa hiệu chuẩn';
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 125),
+                      itemCount: _rooms.length,
+                      itemBuilder: (context, index) {
+                        final room = _rooms[index];
+                        final rawRoomId = (room['room_id'] ?? 'room1').toString();
+                        final roomName = formatRoomName(room['name']?.toString() ?? rawRoomId);
+                        final seats = room['total_seats'] ?? (rawRoomId.contains('3') ? 132 : 136);
+                        final isCalibrated = room['is_calibrated'] == true;
+                        final status = isCalibrated ? 'Đã hiệu chuẩn' : 'Chưa hiệu chuẩn';
 
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 9),
-                    child: CSAppCard(
-                      borderColor: _selectedIndex == index
-                          ? CSAppColors.primary
-                          : CSAppColors.border,
-                      onTap: () {
-                        setState(() => _selectedIndex = index);
-                        widget.onConfirmed?.call(_rooms[index]);
-                      },
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: CSAppCard(
+                            borderColor: _selectedIndex == index
+                                ? CSAppColors.primary
+                                : CSAppColors.border,
+                            onTap: () {
+                              setState(() => _selectedIndex = index);
+                              widget.onConfirmed?.call(_rooms[index]);
+                            },
+                            child: Row(
                               children: [
-                                Text(
-                                  roomName,
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w700,
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: CSAppColors.primary.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.meeting_room_outlined,
+                                    color: CSAppColors.primary,
+                                    size: 22,
                                   ),
                                 ),
-                                Text(
-                                  rawRoomId == 'room3'
-                                      ? 'Tổng số ghế: $seats ghế (10 hàng A–J: A=10, B–I=13, J=18)'
-                                      : 'Tổng số ghế: $seats ghế (12 hàng A–L: A=8, B–J=11, K=13, L=16)',
-                                  style: const TextStyle(
-                                    color: CSAppColors.muted,
-                                    fontSize: 11,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        roomName,
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: CSAppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Tổng số ghế: $seats ghế',
+                                        style: TextStyle(
+                                          color: CSAppColors.muted,
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: (isCalibrated ? CSAppColors.success : CSAppColors.warning)
+                                            .withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '● $status',
+                                        style: TextStyle(
+                                          color: isCalibrated ? CSAppColors.success : CSAppColors.warning,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: CSAppColors.muted,
+                                      size: 20,
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '● $status',
-                                style: TextStyle(
-                                  color: room['is_calibrated'] == true ? CSAppColors.success : CSAppColors.warning,
-                                  fontSize: 10,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: CSAppColors.muted,
-                                size: 18,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: CSPrimaryButton(
-                label: 'Xem sơ đồ ghế phòng chiếu',
-                onPressed: _selectedIndex == -1 ? null : () {
-                  widget.onConfirmed?.call(_rooms[_selectedIndex]);
-                },
-              ),
             ),
           ],
         ),
