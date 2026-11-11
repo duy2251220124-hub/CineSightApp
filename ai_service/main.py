@@ -1182,6 +1182,38 @@ except Exception as e:
 
 
 # ---------------------------------------------------------------------------
+# Phục vụ tải trực tiếp file cài đặt Android (.apk) mới nhất
+# ---------------------------------------------------------------------------
+MOBILE_APK_PATH = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "mobile_app",
+        "build",
+        "app",
+        "outputs",
+        "flutter-apk",
+        "app-release.apk",
+    )
+)
+
+
+@app.get("/CineSight.apk", include_in_schema=False)
+@app.get("/download-apk", include_in_schema=False)
+def download_latest_apk():
+    if os.path.isfile(MOBILE_APK_PATH):
+        return FileResponse(
+            MOBILE_APK_PATH,
+            media_type="application/vnd.android.package-archive",
+            filename="CineSight-v2.4.1.apk",
+        )
+    return JSONResponse(
+        status_code=404,
+        content={"error": "Chưa tìm thấy bản build app-release.apk trên máy chủ."},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Phục vụ Flutter Mobile Web App (dành cho iOS / Safari / PWA)
 # ---------------------------------------------------------------------------
 MOBILE_WEB_BUILD_DIR = os.path.abspath(
