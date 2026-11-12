@@ -80,28 +80,49 @@ class TestDatabase3NFAndForeignKeys(unittest.TestCase):
 
     def test_3_incidents_left_join_returns_full_contract(self):
         """list_incidents() và get_incident() nối bảng employees trả đủ các trường cho Mobile/Web."""
-        items = list_incidents()
-        self.assertGreater(len(items), 0)
-        sample = items[0]
-        for required_key in (
-            "id",
-            "category",
-            "severity",
-            "title",
-            "room_id",
-            "reporter_id",
-            "reporter_name",
-            "reporter_role",
-            "shift_label",
-            "status",
-            "resolved_by_id",
-            "resolved_by_name",
-        ):
-            self.assertIn(required_key, sample)
+        temp_id = None
+        try:
+            items = list_incidents()
+            if not items:
+                temp_id = create_incident(
+                    category="seat_damage",
+                    severity="low",
+                    title="Kiểm thử 3NF LEFT JOIN",
+                    description="Bản ghi kiểm thử tự động",
+                    room_id="room1",
+                    show_id=None,
+                    seat_ids='["A01"]',
+                    reporter_id=2,
+                    reporter_shift="ca_sang",
+                )
+                items = list_incidents()
+            self.assertGreater(len(items), 0)
+            sample = items[0]
+            for required_key in (
+                "id",
+                "category",
+                "severity",
+                "title",
+                "room_id",
+                "reporter_id",
+                "reporter_name",
+                "reporter_role",
+                "shift_label",
+                "status",
+                "resolved_by_id",
+                "resolved_by_name",
+            ):
+                self.assertIn(required_key, sample)
 
-        single = get_incident(sample["id"])
-        self.assertIsNotNone(single)
-        self.assertEqual(single["reporter_name"], sample["reporter_name"])
+            single = get_incident(sample["id"])
+            self.assertIsNotNone(single)
+            self.assertEqual(single["reporter_name"], sample["reporter_name"])
+        finally:
+            if temp_id is not None:
+                conn = sqlite3.connect(DB_PATH)
+                conn.execute("DELETE FROM incidents WHERE id=?", (temp_id,))
+                conn.commit()
+                conn.close()
 
     def test_4_ai_inference_logs_table_and_fk(self):
         """Bảng ai_inference_logs tồn tại, có yolo_time_ms & mapping_time_ms, và có Khóa Ngoại chuẩn."""

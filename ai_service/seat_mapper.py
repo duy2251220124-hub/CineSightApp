@@ -31,6 +31,23 @@ def normalize_seat(code: str) -> str:
         return f"{m.group(1).upper()}{int(m.group(2)):02d}"
     return str(code).strip().upper()
 
+
+# Quy ước hạng ghế chuẩn cho cả 4 phòng chiếu (chỉ gồm Ghế Thường & Ghế VIP, không có Sweetbox):
+# - Hàng F, G, H, I, J: Ghế VIP (trung tâm tầm nhìn chuẩn)
+# - Hàng A, B, C, D, E, K, L: Ghế Thường (STANDARD)
+VIP_ROWS = ("F", "G", "H", "I", "J")
+
+
+def get_seat_tier(seat_code: str, room_id: str = None) -> str:
+    """Trả về hạng ghế ('VIP' hoặc 'STANDARD') dựa trên hàng ghế."""
+    norm = normalize_seat(seat_code)
+    m = re.match(r"([A-Z]+)", norm)
+    row_letter = m.group(1) if m else ""
+    if row_letter in VIP_ROWS:
+        return "VIP"
+    return "STANDARD"
+
+
 def load_seats_config(room_id: str):
     """
     Đọc file cấu hình ghế của MỘT PHÒNG CỤ THỂ.
@@ -142,28 +159,49 @@ def process_ai_detections(detected_heads, seats_config):
     return set_B
 
 def generate_alerts(set_A: set, set_B: set, room_id: str, total_seats: int, total_detected_people: int = None, capacity_threshold: int = 0):
-    """Sinh cảnh báo chênh lệch cho 1 phòng chiếu cụ thể."""
+    """Sinh cảnh báo chênh lệch cho 1 phòng chiếu cụ thể, kèm suy luận tự ý nâng hạng ghế VIP (VIP Seat Hopping)."""
     print(f"\n--- BÁO CÁO KIỂM ĐẾM PHÒNG [{room_id.upper()}] ---")
     print(f"Tập A (App soát vé) : {set_A}")
     print(f"Tập B (AI Camera)   : {set_B}")
 
-    khach_lau = set_B - set_A
-    khach_vang = set_A - set_B
+    khach_lau = sorted(set_B - set_A)
+    khach_vang = sorted(set_A - set_B)
     detected_count = total_detected_people if total_detected_people is not None else len(set_B)
     over_capacity = (detected_count > total_seats) or (capacity_threshold > 0 and len(khach_lau) >= capacity_threshold)
+
+    # Luật suy luận VIP Seat Hopping:
+    # Khi có ghế thuộc B \ A nằm ở hàng VIP đồng thời có ghế thuộc A \ B nằm ở hàng STANDARD
+    illegal_vip = [s for s in khach_lau if get_seat_tier(s, room_id) == "VIP"]
+    missing_standard = [s for s in khach_vang if get_seat_tier(s, room_id) == "STANDARD"]
+    vip_seat_hopping = []
+    for std_seat, vip_seat in zip(missing_standard, illegal_vip):
+        vip_seat_hopping.append({
+            "from_seat": std_seat,
+            "to_seat": vip_seat,
+            "from_tier": "STANDARD",
+            "to_tier": "VIP",
+            "same_headcount": len(set_B) == len(set_A),
+            "message": f"Nghi vấn khách tự ý chuyển từ ghế Thường {std_seat} lên ghế VIP {vip_seat}",
+        })
 
     if khach_lau:
         print(f"[ĐỎ] Ngồi không có vé tại: {khach_lau}")
     if khach_vang:
         print(f"[VÀNG] Có vé nhưng ghế trống tại: {khach_vang}")
+    if vip_seat_hopping:
+        print(f"[TÍM] Nghi vấn tự ý nâng hạng ghế VIP: {vip_seat_hopping}")
     if over_capacity:
         print(f"[ĐỎ] VƯỢT SỨC CHỨA! Phát hiện {detected_count} người / {total_seats} ghế.")
     if not khach_lau and not khach_vang and not over_capacity:
         print("[XANH] Tất cả khớp! An toàn chiếu phim.")
-    
+
+    seat_tiers = {s: get_seat_tier(s, room_id) for s in (set(set_A) | set(set_B))}
+
     return {
         "room_id": room_id,
         "illegal_occupants": list(khach_lau),
         "missing_guests": list(khach_vang),
-        "over_capacity": over_capacity
+        "over_capacity": over_capacity,
+        "vip_seat_hopping": vip_seat_hopping,
+        "seat_tiers": seat_tiers,
     }

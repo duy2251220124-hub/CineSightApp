@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:crypto/crypto.dart';
 
 import 'dart:convert';
 
@@ -7,6 +8,67 @@ import '../database/hive_service.dart';
 
 class ApiClient {
   static String get baseUrl => HiveService.getServerUrl();
+
+  /// Khóa bí mật HMAC-SHA256 dùng để xác thực chữ ký số mã QR vé ngay cả khi Offline 100% (UC03/UC04)
+  static const String qrHmacSecret = 'CINESIGHT_QR_HMAC_2026_SECRET_KEY';
+  static const Set<String> vipRows = {'F', 'G', 'H', 'I', 'J'};
+
+  /// Chuẩn hóa mã ghế (A1 -> A01)
+  static String normalizeSeatCode(String seat) {
+    final clean = seat.trim().toUpperCase();
+    if (clean.length == 2 &&
+        clean.codeUnitAt(1) >= 48 &&
+        clean.codeUnitAt(1) <= 57) {
+      return '${clean[0]}0${clean[1]}';
+    }
+    return clean;
+  }
+
+  /// Xác định hạng ghế: VIP (hàng F, G, H, I, J) hoặc STANDARD (hàng A..E, K, L)
+  static String getSeatTier(String seat) {
+    final clean = normalizeSeatCode(seat);
+    if (clean.isEmpty) return 'STANDARD';
+    return vipRows.contains(clean[0]) ? 'VIP' : 'STANDARD';
+  }
+
+  /// Tạo chữ ký số HMAC-SHA256 (16 ký tự hex đầu) khớp với backend security.py
+  static String signTicketQr({
+    required String room,
+    required String show,
+    required String ticket,
+    required String seat,
+  }) {
+    final cleanRoom = room.replaceAll('seats_config_', '').trim();
+    final cleanShow = show.trim();
+    final cleanTicket = ticket.trim();
+    final cleanSeat = normalizeSeatCode(seat);
+    final canonical = '$cleanRoom|$cleanShow|$cleanTicket|$cleanSeat';
+    final hmac = Hmac(sha256, utf8.encode(qrHmacSecret));
+    final digest = hmac.convert(utf8.encode(canonical)).toString();
+    return digest.substring(0, 16);
+  }
+
+  /// Kiểm tra chữ ký số HMAC-SHA256 trên mã QR vé (chống vé giả mạo Offline & Online)
+  static bool verifyTicketQrSignature({
+    required String room,
+    required String show,
+    required String ticket,
+    required String seat,
+    required String? signature,
+  }) {
+    if (signature == null || signature.trim().isEmpty) return false;
+    final cleanSig = signature.trim().toLowerCase();
+    final expected = signTicketQr(
+      room: room,
+      show: show,
+      ticket: ticket,
+      seat: seat,
+    ).toLowerCase();
+    return cleanSig == expected;
+  }
+
+  /// Danh sách xung đột quét trùng đa thiết bị từ lần đồng bộ gần nhất
+  static List<Map<String, dynamic>> lastSyncConflicts = [];
 
   /// Cập nhật địa chỉ máy chủ động mà không cần build lại APK
   static void updateBaseUrl(String newUrl) {
@@ -24,27 +86,52 @@ class ApiClient {
     _dio.options.headers.remove('Authorization');
   }
 
-  static String getDynamicShiftLabel(String? role, [DateTime? time]) {
+  /// Nhận diện ca trực tự động phủ kín 24h kèm khoảng đệm ±30 phút (UC01)
+  static String getDynamicShiftLabel(
+    String? role, [
+    DateTime? time,
+    String? assignedShift,
+  ]) {
     final now = time ?? DateTime.now();
     final minuteOfDay = now.hour * 60 + now.minute;
     final r = (role ?? '').trim().toLowerCase();
     final isManager =
         r.contains('quản lý') || r.contains('manager') || r.contains('admin');
 
+    final assigned =
+        (assignedShift ?? currentUser?['shift']?.toString() ?? '').trim();
+
     if (isManager) {
-      if (minuteOfDay >= 450 && minuteOfDay < 960) {
+      if (assigned == 'ca_sang' && minuteOfDay >= 420 && minuteOfDay <= 990) {
+        return 'Ca sáng (07:30 - 16:00)';
+      }
+      if (assigned == 'ca_toi' && minuteOfDay >= 930 && minuteOfDay <= 1440) {
+        return 'Ca tối (16:00 - 24:00)';
+      }
+      // Đệm 30 phút đầu ngày (07:00 - 07:30) và lấp khoảng trống 16:00 - 16:30
+      if (minuteOfDay >= 420 && minuteOfDay < 960) {
         return 'Ca sáng (07:30 - 16:00)';
       } else if (minuteOfDay >= 960 && minuteOfDay < 1440) {
-        return 'Ca tối (16:30 - 24:00)';
+        return 'Ca tối (16:00 - 24:00)';
       } else {
         return 'Ca đêm (00:00 - 07:30)';
       }
     } else {
-      if (minuteOfDay >= 450 && minuteOfDay < 780) {
+      if (assigned == 'ca_sang' && minuteOfDay >= 420 && minuteOfDay <= 810) {
+        return 'Ca sáng (07:30 - 13:00)';
+      }
+      if (assigned == 'ca_chieu' && minuteOfDay >= 750 && minuteOfDay <= 990) {
+        return 'Ca chiều (13:00 - 16:00)';
+      }
+      if (assigned == 'ca_toi' && minuteOfDay >= 930 && minuteOfDay <= 1410) {
+        return 'Ca tối (16:00 - 23:00)';
+      }
+      // Đệm 30 phút trước ca sáng (07:00) và 30 phút bàn giao sau ca tối (23:30)
+      if (minuteOfDay >= 420 && minuteOfDay < 780) {
         return 'Ca sáng (07:30 - 13:00)';
       } else if (minuteOfDay >= 780 && minuteOfDay < 960) {
         return 'Ca chiều (13:00 - 16:00)';
-      } else if (minuteOfDay >= 960 && minuteOfDay < 1380) {
+      } else if (minuteOfDay >= 960 && minuteOfDay <= 1410) {
         return 'Ca tối (16:00 - 23:00)';
       } else {
         return 'Ca đêm (23:00 - 07:30)';
@@ -117,7 +204,7 @@ class ApiClient {
           ),
         );
 
-  /// Hàm đóng gói danh sách vé quét được bắn lên AI Server
+  /// Hàm đóng gói danh sách vé quét được bắn lên AI Server (kèm chữ ký số & device_id)
   static Future<bool> syncTicketsToServer(String roomId, String showId) async {
     try {
       final rawTickets = HiveService.getAllScannedTickets();
@@ -125,18 +212,24 @@ class ApiClient {
 
       final Map<String, Map<String, List<Map<String, dynamic>>>> groups = {};
       final Map<String, Map<String, List<String>>> groupRawTickets = {};
+      final deviceId = HiveService.getDeviceId();
+      lastSyncConflicts = [];
 
       for (var raw in rawTickets) {
         try {
           final Map<String, dynamic> parsed = jsonDecode(raw);
           final ticketRoom = parsed['room']?.toString() ?? roomId;
           final ticketShow = parsed['show']?.toString() ?? showId;
+          final seatStr = parsed['seat']?.toString() ?? '';
 
           groups.putIfAbsent(ticketRoom, () => {});
           groups[ticketRoom]!.putIfAbsent(ticketShow, () => []);
           groups[ticketRoom]![ticketShow]!.add({
             'ticket': parsed['ticket'],
-            'seat': parsed['seat'],
+            'seat': seatStr,
+            'tier': parsed['tier'] ?? getSeatTier(seatStr),
+            'sig': parsed['sig'] ?? parsed['signature'],
+            'device_id': deviceId,
           });
 
           groupRawTickets.putIfAbsent(ticketRoom, () => {});
@@ -158,6 +251,7 @@ class ApiClient {
           final formData = FormData.fromMap({
             'room_id': rId,
             'show_id': sId,
+            'device_id': deviceId,
             'scanned_tickets': jsonEncode(tickets),
           });
 
@@ -170,6 +264,14 @@ class ApiClient {
               debugPrint(
                 '[NETWORK] Đồng bộ thành công ${tickets.length} vé cho phòng $rId, suất $sId',
               );
+              final conflicts = response.data?['conflicts'];
+              if (conflicts is List && conflicts.isNotEmpty) {
+                for (final c in conflicts) {
+                  if (c is Map) {
+                    lastSyncConflicts.add(Map<String, dynamic>.from(c));
+                  }
+                }
+              }
               successfullySyncedRawTickets.addAll(rawList);
             } else {
               allSuccess = false;
@@ -282,9 +384,15 @@ class ApiClient {
     }
   }
 
-  static Future<bool> resolveAlert(int alertId) async {
+  static Future<bool> resolveAlert(
+    int alertId, {
+    String resolution = 'violation_handled',
+  }) async {
     try {
-      final response = await _dio.post('/api/v1/resolve_alert/$alertId');
+      final response = await _dio.post(
+        '/api/v1/resolve_alert/$alertId',
+        data: {'resolution': resolution},
+      );
       return response.statusCode == 200 && response.data['status'] == 'success';
     } catch (e) {
       debugPrint('[NETWORK] Lỗi resolveAlert: $e');
@@ -293,11 +401,20 @@ class ApiClient {
   }
 
   /// Xử lý hàng loạt toàn bộ cảnh báo của 1 phòng chiếu (One-Tap Batch Resolve)
-  static Future<bool> resolveRoomAlerts(String roomId, String showId) async {
+  /// resolution: 'violation_handled' (mời về đúng ghế/ra ngoài) | 'ticket_verified' (bổ sung ghế vào Tập A)
+  static Future<bool> resolveRoomAlerts(
+    String roomId,
+    String showId, {
+    String resolution = 'violation_handled',
+  }) async {
     try {
       final response = await _dio.post(
         '/api/v1/resolve_room_alerts',
-        data: {'room_id': roomId, 'show_id': showId},
+        data: {
+          'room_id': roomId,
+          'show_id': showId,
+          'resolution': resolution,
+        },
       );
       return response.statusCode == 200 && response.data['status'] == 'success';
     } catch (e) {

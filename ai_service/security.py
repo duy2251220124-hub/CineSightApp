@@ -76,7 +76,7 @@ def verify_password(plain_password: str, stored_password: str) -> bool:
 # Token phiên đăng nhập (HMAC-SHA256, dạng JWT rút gọn, chỉ dùng thư viện chuẩn)
 # Định dạng: base64url(payload_json) + "." + base64url(HMAC-SHA256(payload))
 # ---------------------------------------------------------------------------
-TOKEN_TTL_HOURS_DEFAULT = 12
+TOKEN_TTL_HOURS_DEFAULT = 48
 _SECRET_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".auth_secret")
 _secret_cache = None
 
@@ -141,3 +141,61 @@ def verify_token(token: str, now: float = None):
         return int(payload["sub"])
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Chữ ký số HMAC-SHA256 cho mã QR vé điện tử (Chống vé giả mạo Offline & Online)
+# Canonical message: "{clean_room}|{clean_show}|{clean_ticket}|{clean_seat}"
+# ---------------------------------------------------------------------------
+import re as _re
+
+QR_HMAC_SECRET_DEFAULT = "CINESIGHT_QR_HMAC_2026_SECRET_KEY"
+
+
+def get_qr_secret() -> bytes:
+    val = os.environ.get("CINESIGHT_QR_SECRET", QR_HMAC_SECRET_DEFAULT).strip()
+    return (val or QR_HMAC_SECRET_DEFAULT).encode("utf-8")
+
+
+def _normalize_qr_seat(seat: str) -> str:
+    m = _re.match(r"([a-zA-Z]+)\s*(\d+)", str(seat or "").strip())
+    if m:
+        return f"{m.group(1).upper()}{int(m.group(2)):02d}"
+    return str(seat or "").strip().upper()
+
+
+def _normalize_qr_room(room: str) -> str:
+    r = str(room or "").strip().lower().replace("seats_config_", "")
+    if r.isdigit():
+        return f"room{r}"
+    return r
+
+
+def sign_ticket_qr(room: str, show: str, ticket: str, seat: str) -> str:
+    """Tạo chữ ký số HMAC-SHA256 (16 ký tự hex đầu = 64-bit MAC) cho thông tin vé QR."""
+    clean_room = _normalize_qr_room(room)
+    clean_show = str(show or "").strip()
+    clean_ticket = str(ticket or "").strip()
+    clean_seat = _normalize_qr_seat(seat)
+    canonical = f"{clean_room}|{clean_show}|{clean_ticket}|{clean_seat}"
+    full_hex = hmac.new(get_qr_secret(), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+    return full_hex[:16]
+
+
+def verify_ticket_qr_signature(room: str, show: str, ticket: str, seat: str, signature: str) -> bool:
+    """Xác thực chữ ký số HMAC-SHA256 trên mã QR vé (chống tấn công đo thời gian)."""
+    if not signature or not isinstance(signature, str):
+        return False
+    given = signature.strip().lower()
+    clean_room = _normalize_qr_room(room)
+    clean_show = str(show or "").strip()
+    clean_ticket = str(ticket or "").strip()
+    clean_seat = _normalize_qr_seat(seat)
+    canonical = f"{clean_room}|{clean_show}|{clean_ticket}|{clean_seat}"
+    full_hex = hmac.new(get_qr_secret(), canonical.encode("utf-8"), hashlib.sha256).hexdigest().lower()
+    if len(given) == 16:
+        return hmac.compare_digest(given, full_hex[:16])
+    if len(given) == 64:
+        return hmac.compare_digest(given, full_hex)
+    return False
+

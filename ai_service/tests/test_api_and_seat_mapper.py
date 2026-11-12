@@ -554,6 +554,144 @@ class TestApiAndStrictRules(unittest.TestCase):
             conn.commit()
             conn.close()
 
+    def test_9_four_business_logic_fixes(self):
+        """Kiểm thử toàn diện 4 cải tiến logic nghiệp vụ (Lỗi 1.1, 1.2, 2, 3, 4)."""
+        from datetime import datetime
+        from database import get_dynamic_shift, get_active_alerts, get_seats, save_alerts
+        from seat_mapper import get_seat_tier, generate_alerts
+        from security import sign_ticket_qr, verify_ticket_qr_signature
+
+        # --- LỖI 2: Dynamic Shift phủ kín 24h & đệm ±30 phút ---
+        # Quản lý đăng nhập lúc 16:15 (khoảng trống cũ 16:00-16:30) -> nhận ('ca_toi', 'Ca tối (16:00 - 24:00)')
+        self.assertEqual(
+            get_dynamic_shift("Quản lý", datetime(2026, 11, 12, 16, 15)),
+            ("ca_toi", "Ca tối (16:00 - 24:00)"),
+        )
+        # Nhân viên đến sớm lúc 07:15 -> nhận 'ca_sang' (nhờ đệm 30 phút)
+        self.assertEqual(
+            get_dynamic_shift("Soát vé", datetime(2026, 11, 12, 7, 15))[0],
+            "ca_sang",
+        )
+        # Nhân viên bàn giao ca muộn lúc 23:15 -> nhận 'ca_toi' (nhờ đệm 30 phút)
+        self.assertEqual(
+            get_dynamic_shift("Soát vé", datetime(2026, 11, 12, 23, 15))[0],
+            "ca_toi",
+        )
+
+        # --- LỖI 4: Hạng ghế VIP / STANDARD (không có Sweetbox) & suy luận VIP Seat Hopping ---
+        self.assertEqual(get_seat_tier("B04"), "STANDARD")
+        self.assertEqual(get_seat_tier("J10"), "VIP")
+        self.assertEqual(get_seat_tier("G05"), "VIP")
+        hop_res = generate_alerts(
+            set_A={"B04"},
+            set_B={"G05"},
+            room_id="room3",
+            total_seats=132,
+            total_detected_people=1,
+        )
+        self.assertEqual(hop_res["illegal_occupants"], ["G05"])
+        self.assertEqual(hop_res["missing_guests"], ["B04"])
+        self.assertEqual(len(hop_res["vip_seat_hopping"]), 1)
+        self.assertEqual(hop_res["vip_seat_hopping"][0]["from_seat"], "B04")
+        self.assertEqual(hop_res["vip_seat_hopping"][0]["to_seat"], "G05")
+
+        # --- LỖI 1.1, 1.2 & LỖI 3 trên Database & API ---
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            row = conn.execute(
+                "SELECT room_id, show_id FROM showtimes WHERE status='scheduled' ORDER BY end_at DESC LIMIT 1"
+            ).fetchone()
+            self.assertIsNotNone(row)
+            valid_room, valid_show = row[0], row[1]
+            max_alert_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM alerts").fetchone()[0]
+
+            staff_token = create_token(user_id=2)
+
+            # Lỗi 1.1: Ký số HMAC-SHA256 hợp lệ & phát hiện vé giả mạo chữ ký số
+            sig_ok = sign_ticket_qr(valid_room, valid_show, "TICK-TEST-F01", "F01")
+            self.assertTrue(verify_ticket_qr_signature(valid_room, valid_show, "TICK-TEST-F01", "F01", sig_ok))
+            self.assertFalse(verify_ticket_qr_signature(valid_room, valid_show, "TICK-TEST-F01", "F01", "0000deadbeef0000"))
+
+            # Gửi 1 vé chữ ký giả lên /api/v1/sync_tickets -> bị chặn và sinh cảnh báo forged_ticket
+            res_forged = self.client.post(
+                "/api/v1/sync_tickets",
+                data={
+                    "room_id": valid_room,
+                    "show_id": valid_show,
+                    "device_id": "dev_hacker",
+                    "scanned_tickets": json.dumps([
+                        {"ticket": "TICK-FORGED-99", "seat": "H09", "sig": "bad_signature_123"}
+                    ]),
+                },
+                headers={"Authorization": f"Bearer {staff_token}"},
+            )
+            self.assertEqual(res_forged.status_code, 200)
+            forged_body = res_forged.json()
+            self.assertTrue(forged_body["has_forged"])
+            self.assertNotIn("H09", get_seats(valid_room, valid_show))
+
+            # Lỗi 1.2: Quét trùng vé qua 2 thiết bị Offline (dev_gate_1 và dev_gate_2)
+            sig_f02 = sign_ticket_qr(valid_room, valid_show, "TICK-DUP-F02", "F02")
+            res_dev1 = self.client.post(
+                "/api/v1/sync_tickets",
+                data={
+                    "room_id": valid_room,
+                    "show_id": valid_show,
+                    "device_id": "dev_gate_1",
+                    "scanned_tickets": json.dumps([
+                        {"ticket": "TICK-DUP-F02", "seat": "F02", "sig": sig_f02}
+                    ]),
+                },
+                headers={"Authorization": f"Bearer {staff_token}"},
+            )
+            self.assertEqual(res_dev1.status_code, 200)
+            self.assertFalse(res_dev1.json()["has_conflicts"])
+
+            # Thiết bị 2 đồng bộ cùng mã vé đó lên sau -> phát hiện xung đột đa thiết bị
+            res_dev2 = self.client.post(
+                "/api/v1/sync_tickets",
+                data={
+                    "room_id": valid_room,
+                    "show_id": valid_show,
+                    "device_id": "dev_gate_2",
+                    "scanned_tickets": json.dumps([
+                        {"ticket": "TICK-DUP-F02", "seat": "F02", "sig": sig_f02}
+                    ]),
+                },
+                headers={"Authorization": f"Bearer {staff_token}"},
+            )
+            self.assertEqual(res_dev2.status_code, 200)
+            self.assertTrue(res_dev2.json()["has_conflicts"])
+            dup_alerts = [
+                a for a in get_active_alerts(valid_room)
+                if a["show_id"] == valid_show and a["alert_type"] == "duplicate_scan" and a["seat_id"] == "F02"
+            ]
+            self.assertGreaterEqual(len(dup_alerts), 1)
+
+            # Lỗi 3: Xử lý cảnh báo với resolution='ticket_verified' -> tự động thêm ghế E08 vào Tập A
+            save_alerts(valid_room, valid_show, "illegal_occupant", ["E08"])
+            res_verify = self.client.post(
+                "/api/v1/resolve_room_alerts",
+                json={
+                    "room_id": valid_room,
+                    "show_id": valid_show,
+                    "resolution": "ticket_verified",
+                },
+                headers={"Authorization": f"Bearer {staff_token}"},
+            )
+            self.assertEqual(res_verify.status_code, 200)
+            self.assertEqual(res_verify.json()["resolution"], "ticket_verified")
+            # Ghế E08 đã nằm trong Tập A (get_seats) nên Mốc 2 và Mốc 3 không báo động giả lại
+            self.assertIn("E08", get_seats(valid_room, valid_show))
+        finally:
+            conn.execute(
+                "DELETE FROM tickets WHERE room_id=? AND show_id=? AND seat_id IN ('F01', 'F02', 'H09', 'E08')",
+                (valid_room, valid_show),
+            )
+            conn.execute("DELETE FROM alerts WHERE id > ?", (max_alert_id,))
+            conn.commit()
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()

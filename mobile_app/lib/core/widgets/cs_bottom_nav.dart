@@ -1,4 +1,5 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_app/theme/app_theme.dart';
@@ -27,7 +28,11 @@ class _CSBottomNavState extends State<CSBottomNav> {
     const items = [
       (Icons.home_rounded, Icons.home_outlined, 'Trang chủ'),
       (Icons.qr_code_scanner_rounded, Icons.qr_code_scanner_rounded, 'Quét vé'),
-      (Icons.notifications_rounded, Icons.notifications_none_rounded, 'Cảnh báo'),
+      (
+        Icons.notifications_rounded,
+        Icons.notifications_none_rounded,
+        'Cảnh báo',
+      ),
       (Icons.settings_rounded, Icons.settings_outlined, 'Cài đặt'),
     ];
 
@@ -57,7 +62,7 @@ class _CSBottomNavState extends State<CSBottomNav> {
                     height: 65.5,
                     decoration: BoxDecoration(
                       color: isLight
-                          ? Colors.white.withValues(alpha: 0.56)
+                          ? Colors.white.withValues(alpha: 0.46)
                           : const Color(0xFF151D2E).withValues(alpha: 0.66),
                       borderRadius: BorderRadius.circular(34),
                       border: Border.all(
@@ -99,10 +104,12 @@ class _CSBottomNavState extends State<CSBottomNav> {
                         : inactiveSlate;
 
                     // Animation nổi nhẹ mượt mà khi nhấn/chọn
-                    final double liftOffset =
-                        selected ? -4.0 : (isPressed ? -2.0 : 0.0);
-                    final double iconScale =
-                        selected ? 1.12 : (isPressed ? 1.05 : 1.0);
+                    final double liftOffset = selected
+                        ? -4.0
+                        : (isPressed ? -2.0 : 0.0);
+                    final double iconScale = selected
+                        ? 1.12
+                        : (isPressed ? 1.05 : 1.0);
 
                     return Expanded(
                       child: GestureDetector(
@@ -167,7 +174,8 @@ class _CSBottomNavState extends State<CSBottomNav> {
                                       children: [
                                         Icon(
                                           hasActiveAlert
-                                              ? Icons.notifications_active_rounded
+                                              ? Icons
+                                                    .notifications_active_rounded
                                               : (selected ? item.$1 : item.$2),
                                           color: selected
                                               ? itemActiveColor
@@ -193,11 +201,10 @@ class _CSBottomNavState extends State<CSBottomNav> {
                                                   width: 1.5,
                                                 ),
                                               ),
-                                              constraints:
-                                                  const BoxConstraints(
-                                                    minWidth: 15,
-                                                    minHeight: 15,
-                                                  ),
+                                              constraints: const BoxConstraints(
+                                                minWidth: 15,
+                                                minHeight: 15,
+                                              ),
                                               child: Text(
                                                 widget.alertCount > 99
                                                     ? '99+'

@@ -137,7 +137,7 @@ app = FastAPI(
 SHIFTS = [
     {"code": "ca_sang", "label": "Ca sáng", "staff_hours": "07:30 - 13:00", "manager_hours": "07:30 - 16:00"},
     {"code": "ca_chieu", "label": "Ca chiều", "staff_hours": "13:00 - 16:00", "manager_hours": "-"},
-    {"code": "ca_toi", "label": "Ca tối", "staff_hours": "16:00 - 23:00", "manager_hours": "16:30 - 24:00"},
+    {"code": "ca_toi", "label": "Ca tối", "staff_hours": "16:00 - 23:00", "manager_hours": "16:00 - 24:00"},
     {"code": "ca_dem", "label": "Ca đêm", "staff_hours": "23:00 - 07:30", "manager_hours": "00:00 - 07:30"}
 ]
 
@@ -175,6 +175,7 @@ def sync_tickets_from_app(
     room_id: str = Form(..., description="Mã phòng chiếu. VD: room1"),
     show_id: str = Form(..., description="Mã suất chiếu. VD: 2026-09-25T19:30"),
     scanned_tickets: str = Form(..., description="Mảng JSON chứa các Object vé hợp lệ (Tập A)"),
+    device_id: Optional[str] = Form(None, description="Định danh thiết bị soát vé để phát hiện xung đột đa máy"),
     request: Request = None,
 ):
     import json
@@ -186,18 +187,69 @@ def sync_tickets_from_app(
         if not isinstance(tickets_list, list):
             return JSONResponse(status_code=400, content={"error": "scanned_tickets phải là mảng JSON."})
         from database import save_tickets
-        from seat_mapper import normalize_seat
-        
-        # Chuẩn hóa seat_id trước khi lưu
+        from seat_mapper import normalize_seat, get_seat_tier
+
+        authed_user = _extract_bearer_user(request)
+        scanned_by_id = authed_user["id"] if authed_user else None
+
+        # Chuẩn hóa seat_id và hạng ghế trước khi lưu
         for t in tickets_list:
-            t['seat'] = normalize_seat(t['seat'])
-            
-        save_tickets(room_id, show_id, tickets_list)
-        return {"status": "success", "message": f"Đã lưu {len(tickets_list)} vé cho phòng {room_id}, suất {show_id}"}
+            t["seat"] = normalize_seat(t["seat"])
+            t["tier"] = t.get("tier") or get_seat_tier(t["seat"], room_id)
+
+        sync_res = save_tickets(
+            room_id,
+            show_id,
+            tickets_list,
+            scanned_by_id=scanned_by_id,
+            device_id=device_id,
+        )
+        conflicts = sync_res.get("conflicts", [])
+        forged = sync_res.get("forged_tickets", [])
+        saved_count = sync_res.get("saved_count", len(tickets_list))
+        return {
+            "status": "success",
+            "saved_count": saved_count,
+            "conflicts": conflicts,
+            "forged_tickets": forged,
+            "has_conflicts": len(conflicts) > 0,
+            "has_forged": len(forged) > 0,
+            "message": f"Đã lưu {saved_count}/{len(tickets_list)} vé cho phòng {room_id}, suất {show_id}"
+            + (f" (Phát hiện {len(conflicts)} xung đột quét trùng!)" if conflicts else "")
+            + (f" (Chặn {len(forged)} vé giả mạo!)" if forged else ""),
+        }
     except ValueError as ve:
         return JSONResponse(status_code=404, content={"error": str(ve)})
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+class SignTicketsPayload(BaseModel):
+    room_id: str
+    show_id: str
+    tickets: List[dict]
+
+
+@app.post("/api/v1/tickets/sign")
+def sign_tickets_endpoint(payload: SignTicketsPayload):
+    """Ký số HMAC-SHA256 và gắn hạng ghế (STANDARD / VIP) cho danh sách vé phát hành."""
+    from security import sign_ticket_qr
+    from seat_mapper import normalize_seat, get_seat_tier
+
+    signed_list = []
+    for item in payload.tickets:
+        t_id = str(item.get("ticket") or "").strip()
+        s_id = normalize_seat(item.get("seat") or "")
+        tier = get_seat_tier(s_id, payload.room_id)
+        sig = sign_ticket_qr(payload.room_id, payload.show_id, t_id, s_id)
+        signed_list.append({
+            **item,
+            "ticket": t_id,
+            "seat": s_id,
+            "tier": tier,
+            "sig": sig,
+        })
+    return {"status": "success", "tickets": signed_list}
 
 @app.post("/api/v1/analyze")
 async def analyze_cinema_room(
@@ -385,6 +437,7 @@ def fetch_inference_logs(room_id: str = None, show_id: str = None, limit: int = 
 class ResolveRoomAlertsPayload(BaseModel):
     room_id: str
     show_id: str
+    resolution: Optional[str] = "violation_handled"
 
 @app.get("/api/v1/alerts")
 def fetch_alerts(room_id: str = None):
@@ -404,13 +457,26 @@ def mark_room_alerts_resolved(payload: ResolveRoomAlertsPayload, request: Reques
     auth_err = _require_auth_error(request, require_manager=False)
     if auth_err:
         return auth_err
-    count = resolve_room_alerts(payload.room_id, payload.show_id)
+    authed_user = _extract_bearer_user(request)
+    resolver_id = authed_user["id"] if authed_user else None
+    clean_res = "ticket_verified" if str(payload.resolution or "").strip().lower() == "ticket_verified" else "violation_handled"
+    count = resolve_room_alerts(
+        payload.room_id,
+        payload.show_id,
+        resolution=clean_res,
+        resolver_id=resolver_id,
+    )
     return {
         "status": "success",
         "resolved_count": count,
         "room_id": payload.room_id,
         "show_id": payload.show_id,
-        "message": f"Đã đánh dấu xử lý {count} cảnh báo của phòng {payload.room_id}.",
+        "resolution": clean_res,
+        "message": (
+            f"Đã xác nhận vé hợp lệ bị sót quét và bổ sung vào Tập A ({count} cảnh báo)."
+            if clean_res == "ticket_verified"
+            else f"Đã đánh dấu xử lý vi phạm {count} cảnh báo của phòng {payload.room_id}."
+        ),
     }
 
 @app.get("/api/v1/alerts/history")
@@ -619,13 +685,38 @@ def fetch_tickets(room_id: str, show_id: str = None):
     tickets = get_tickets_list(room_id, show_id)
     return {"status": "success", "tickets": tickets}
 
+class ResolveAlertPayload(BaseModel):
+    resolution: Optional[str] = "violation_handled"
+    single_only: Optional[bool] = False
+
+
 @app.post("/api/v1/resolve_alert/{alert_id}")
-def mark_alert_resolved(alert_id: int, request: Request):
+def mark_alert_resolved(
+    alert_id: int,
+    request: Request,
+    payload: ResolveAlertPayload = Body(default=ResolveAlertPayload()),
+):
     auth_err = _require_auth_error(request, require_manager=False)
     if auth_err:
         return auth_err
-    resolve_alert(alert_id)
-    return {"status": "success", "message": f"Đã đánh dấu cảnh báo {alert_id} là đã xử lý."}
+    authed_user = _extract_bearer_user(request)
+    resolver_id = authed_user["id"] if authed_user else None
+    clean_res = (
+        "ticket_verified"
+        if payload and str(payload.resolution or "").strip().lower() == "ticket_verified"
+        else "violation_handled"
+    )
+    single_only = bool(payload.single_only) if payload else False
+    resolve_alert(alert_id, resolution=clean_res, resolver_id=resolver_id, single_only=single_only)
+    return {
+        "status": "success",
+        "resolution": clean_res,
+        "message": (
+            f"Đã xác nhận vé hợp lệ và bổ sung ghế vào Tập A (cảnh báo #{alert_id})."
+            if clean_res == "ticket_verified"
+            else f"Đã đánh dấu cảnh báo #{alert_id} là đã xử lý vi phạm."
+        ),
+    }
 
 class ConfigPayload(BaseModel):
     key: str

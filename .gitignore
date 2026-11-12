@@ -42,6 +42,8 @@ ai_service/video_samples_room3/
 docs/TAI_KHOAN_HE_THONG.md
 
 # Tai lieu ca nhan, luan van & Word (khong day len Git)
+*.doc
 *.docx
+*.md
 docs/
 .agents/

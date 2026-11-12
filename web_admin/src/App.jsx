@@ -66,6 +66,15 @@ function App() {
   };
 
   useEffect(() => {
+    const onExpired = () => {
+      setCurrentUser(null);
+      setLoginError('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại để tiếp tục thao tác.');
+    };
+    window.addEventListener('cinesight:auth-expired', onExpired);
+    return () => window.removeEventListener('cinesight:auth-expired', onExpired);
+  }, []);
+
+  useEffect(() => {
     const fetchCount = async () => {
       try {
         const data = await getIncidents();

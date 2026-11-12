@@ -37,8 +37,24 @@ export const getStoredToken = () => {
 
 export const getStoredUser = () => {
   try {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
     const raw = localStorage.getItem(AUTH_USER_KEY);
-    if (!raw) return null;
+    if (!raw || !token) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(AUTH_USER_KEY);
+      return null;
+    }
+    // Kiểm tra hạn dùng (exp) của Bearer Token ngay phía Client
+    const parts = token.split('.');
+    if (parts.length === 2) {
+      const b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(b64));
+      if (payload.exp && payload.exp * 1000 <= Date.now()) {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(AUTH_USER_KEY);
+        return null;
+      }
+    }
     const parsed = JSON.parse(raw);
     if (!parsed || parsed.role !== 'Quản lý') {
       localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -68,6 +84,19 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && !error?.config?.url?.includes('/api/v1/login')) {
+      logoutUser();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cinesight:auth-expired'));
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const loginUser = async (username, password) => {
   const res = await api.post('/api/v1/login', {
@@ -134,10 +163,11 @@ export const getActiveAlertsData = async (roomId = null) => {
   return res.data || { alerts: [], grouped_alerts: [] };
 };
 
-export const resolveRoomAlerts = async (roomId, showId) => {
+export const resolveRoomAlerts = async (roomId, showId, resolution = 'violation_handled') => {
   const res = await api.post('/api/v1/resolve_room_alerts', {
     room_id: roomId,
     show_id: showId,
+    resolution,
   });
   return res.data;
 };
@@ -149,8 +179,8 @@ export const healthCheck = async () => {
   return res.data;
 };
 
-export const resolveAlert = async (alertId) => {
-  const res = await api.post(`/api/v1/resolve_alert/${alertId}`);
+export const resolveAlert = async (alertId, resolution = 'violation_handled') => {
+  const res = await api.post(`/api/v1/resolve_alert/${alertId}`, { resolution });
   return res.data;
 };
 

@@ -61,8 +61,10 @@ export default function Alerts() {
           <label style={{ fontSize: 13, color: 'var(--text-dim)' }}>Loại:</label>
           <select value={filterType} onChange={e => setFilterType(e.target.value)} className="soc-input">
             <option value="ALL">Tất cả loại cảnh báo</option>
-            <option value="illegal_occupant">Khách lậu (Đỏ)</option>
+            <option value="illegal_occupant">Khách lậu / Tự nâng hạng VIP (Đỏ)</option>
             <option value="missing_guest">Vắng mặt (Vàng)</option>
+            <option value="duplicate_scan">Gian lận quét trùng đa thiết bị (Đỏ)</option>
+            <option value="forged_ticket">Vé giả mạo chữ ký số (Đỏ)</option>
             <option value="over_capacity">Vượt tải (Đỏ)</option>
             <option value="damaged_seat">Ghế hư hỏng (Xanh)</option>
           </select>
@@ -120,7 +122,19 @@ export default function Alerts() {
                 
                 if (a.alert_type === 'illegal_occupant') {
                   rowClass = 'row-critical'; 
-                  label = 'Khách lậu';
+                  label = a.seat_tier === 'VIP' ? 'Khách lậu (Ghế VIP)' : 'Khách lậu';
+                  icon = (
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                  );
+                } else if (a.alert_type === 'duplicate_scan') {
+                  rowClass = 'row-critical';
+                  label = 'Quét trùng đa thiết bị';
+                  icon = (
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                  );
+                } else if (a.alert_type === 'forged_ticket') {
+                  rowClass = 'row-critical';
+                  label = 'Vé giả mạo (Sai chữ ký số)';
                   icon = (
                     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
                   );

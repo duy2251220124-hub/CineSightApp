@@ -46,7 +46,11 @@ class CSWarningScreenState extends State<CSWarningScreen> {
   String _formatRoomName(String? rId) => formatRoomName(rId);
 
   Color _color(String type) {
-    if (type == 'illegal_occupant') return CSAppColors.danger;
+    if (type == 'illegal_occupant' ||
+        type == 'duplicate_scan' ||
+        type == 'forged_ticket') {
+      return CSAppColors.danger;
+    }
     if (type == 'missing_guest') return CSAppColors.warning;
     return CSAppColors.primary;
   }
@@ -60,16 +64,121 @@ class CSWarningScreenState extends State<CSWarningScreen> {
     return groups;
   }
 
-  Future<void> _handleResolveRoom(String roomId, String showId, String roomDisplayName, int count) async {
+  Future<void> _showResolveOptionsSheet(
+    String roomId,
+    String showId,
+    String roomDisplayName,
+    int count,
+  ) async {
+    final selectedResolution = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: CSAppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Chọn kết quả xử lý ($roomDisplayName)',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: CSAppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Chọn phương thức phù hợp để hệ thống AI đồng bộ chính xác cho các mốc quét tiếp theo (UC06):',
+                  style: TextStyle(fontSize: 12, color: CSAppColors.muted),
+                ),
+                const SizedBox(height: 14),
+                ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: CSAppColors.danger.withValues(alpha: 0.5)),
+                  ),
+                  leading: const Icon(Icons.gpp_maybe_outlined, color: CSAppColors.danger),
+                  title: Text(
+                    '1. Đã xử lý vi phạm',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: CSAppColors.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Đã yêu cầu khách về đúng ghế hoặc mời ra ngoài',
+                    style: TextStyle(fontSize: 11.5, color: CSAppColors.muted),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'violation_handled'),
+                ),
+                const SizedBox(height: 10),
+                ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: CSAppColors.success.withValues(alpha: 0.5)),
+                  ),
+                  leading: const Icon(Icons.verified_outlined, color: CSAppColors.success),
+                  title: Text(
+                    '2. Khách có vé hợp lệ bị sót quét (Bổ sung Tập A)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: CSAppColors.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Cập nhật ghế vào Tập A để Mốc 2 & Mốc 3 không báo động giả lại',
+                    style: TextStyle(fontSize: 11.5, color: CSAppColors.muted),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'ticket_verified'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (selectedResolution != null) {
+      await _handleResolveRoom(
+        roomId,
+        showId,
+        roomDisplayName,
+        count,
+        resolution: selectedResolution,
+      );
+    }
+  }
+
+  Future<void> _handleResolveRoom(
+    String roomId,
+    String showId,
+    String roomDisplayName,
+    int count, {
+    String resolution = 'violation_handled',
+  }) async {
     setState(() => _isBatchResolving = true);
     final messenger = ScaffoldMessenger.of(context);
-    final success = await ApiClient.resolveRoomAlerts(roomId, showId);
+    final success = await ApiClient.resolveRoomAlerts(
+      roomId,
+      showId,
+      resolution: resolution,
+    );
     if (!mounted) return;
     setState(() => _isBatchResolving = false);
     if (success) {
+      final msg = resolution == 'ticket_verified'
+          ? 'Đã xác nhận vé hợp lệ & bổ sung vào Tập A cho $roomDisplayName!'
+          : 'Đã xử lý xong toàn bộ $count cảnh báo cho $roomDisplayName!';
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Đã xử lý xong toàn bộ $count cảnh báo cho $roomDisplayName!'),
+          content: Text(msg),
           backgroundColor: CSAppColors.success,
         ),
       );
@@ -311,8 +420,19 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                           children: roomAlerts.map((warning) {
                                             final atype = warning['alert_type']?.toString() ?? '';
                                             final sName = warning['seat_id']?.toString() ?? 'N/A';
-                                            final isIll = atype == 'illegal_occupant';
+                                            final tier = warning['seat_tier']?.toString() ?? '';
+                                            final isHopping = warning['suspected_type'] == 'vip_seat_hopping';
+                                            final isDup = atype == 'duplicate_scan';
+                                            final isForged = atype == 'forged_ticket';
+                                            final isIll = atype == 'illegal_occupant' || isDup || isForged;
                                             final c = isIll ? CSAppColors.danger : CSAppColors.warning;
+                                            final labelText = isHopping
+                                                ? 'Ghế $sName (VIP ⬆️ từ ${warning["hopping_from"]})'
+                                                : isDup
+                                                    ? 'Ghế $sName (Quét trùng)'
+                                                    : isForged
+                                                        ? 'Ghế $sName (Vé giả)'
+                                                        : 'Ghế $sName${tier == "VIP" ? " (VIP)" : ""}';
                                             return Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                               decoration: BoxDecoration(
@@ -326,7 +446,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                                   Icon(isIll ? Icons.person_off : Icons.event_seat, size: 13, color: c),
                                                   const SizedBox(width: 4),
                                                   Text(
-                                                    'Ghế $sName',
+                                                    labelText,
                                                     style: TextStyle(
                                                       color: c,
                                                       fontSize: 11,
@@ -339,6 +459,28 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                           }).toList(),
                                         ),
                                       ),
+
+                                      if ((first['vip_seat_hopping'] as List?)?.isNotEmpty ?? false)
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(14, 4, 14, 2),
+                                          child: Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF59E0B).withValues(alpha: 0.14),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.6)),
+                                            ),
+                                            child: Text(
+                                              '🔄 VIP Seat Hopping: ${(first['vip_seat_hopping'] as List).map((p) => p['message'] ?? 'Từ ${p['from_seat']} -> ${p['to_seat']}').join(' • ')}',
+                                              style: const TextStyle(
+                                                color: Color(0xFFD97706),
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
 
                                       const SizedBox(height: 10),
 
@@ -359,7 +501,7 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                                 ),
                                                 onPressed: _isBatchResolving
                                                     ? null
-                                                    : () => _handleResolveRoom(roomId, showId, roomName, totalRoomAlerts),
+                                                    : () => _showResolveOptionsSheet(roomId, showId, roomName, totalRoomAlerts),
                                                 icon: const Icon(Icons.check_circle_outline, size: 18),
                                                 label: Text(
                                                   'XỬ LÝ TOÀN BỘ PHÒNG ($totalRoomAlerts GHẾ)',
@@ -404,11 +546,21 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                             children: roomAlerts.map((warning) {
                                               final atype = warning['alert_type']?.toString() ?? '';
                                               final color = _color(atype);
-                                              final isIll = atype == 'illegal_occupant';
+                                              final isHopping = warning['suspected_type'] == 'vip_seat_hopping';
+                                              final isDup = atype == 'duplicate_scan';
+                                              final isForged = atype == 'forged_ticket';
+                                              final isIll = atype == 'illegal_occupant' || isDup || isForged;
                                               final seat = warning['seat_id'] ?? 'N/A';
-                                              final title = isIll
-                                                  ? 'Khách ngồi sai ghế / Không có vé'
-                                                  : 'Ghế trống bất thường (Đã có vé)';
+                                              final tier = warning['seat_tier']?.toString() ?? '';
+                                              final title = isHopping
+                                                  ? '🔄 Nghi vấn tự ý chuyển từ ghế Thường ${warning["hopping_from"]} lên VIP $seat'
+                                                  : isDup
+                                                      ? '⚠️ Gian lận quét trùng vé đa thiết bị'
+                                                      : isForged
+                                                          ? '🚨 Phát hiện vé giả mạo chữ ký số'
+                                                          : isIll
+                                                              ? 'Khách ngồi sai ghế / Không có vé'
+                                                              : 'Ghế trống bất thường (Đã có vé)';
 
                                               return Padding(
                                                 padding: const EdgeInsets.only(top: 8),
@@ -442,7 +594,10 @@ class CSWarningScreenState extends State<CSWarningScreen> {
                                                             crossAxisAlignment: CrossAxisAlignment.start,
                                                             children: [
                                                               Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
-                                                              Text('Vị trí ghế: $seat', style: TextStyle(fontSize: 11, color: CSAppColors.muted)),
+                                                              Text(
+                                                                'Vị trí ghế: $seat${tier == "VIP" ? " (Hạng VIP)" : " (Hạng Thường)"}',
+                                                                style: TextStyle(fontSize: 11, color: CSAppColors.muted),
+                                                              ),
                                                             ],
                                                           ),
                                                         ),

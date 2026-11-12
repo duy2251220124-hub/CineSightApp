@@ -929,12 +929,46 @@ class _ScannerScreenState extends State<ScannerScreen> {
             return;
           }
 
-          final String ticketId = '${data['ticket']}';
-          final String seat = '${data['seat']}';
+          final String ticketId = '${data['ticket']}'.trim();
+          final String seat = ApiClient.normalizeSeatCode('${data['seat']}');
           final String customer = '${data['customer'] ?? data['name'] ?? ''}';
+          final String? sig = (data['sig'] ?? data['signature'])?.toString();
+          final String tier = (data['tier']?.toString().isNotEmpty ?? false)
+              ? data['tier'].toString().toUpperCase()
+              : ApiClient.getSeatTier(seat);
 
-          // Kiểm tra trùng bằng lịch sử vĩnh viễn (anti-passback)
-          final previous = HiveService.findScanRecord(ticketId);
+          // 1. Xác thực chữ ký số HMAC-SHA256 trên mã QR (Chống vé giả mạo cả khi Offline 100% - UC03/UC04)
+          final bool isSigValid = ApiClient.verifyTicketQrSignature(
+            room: ticketRoom,
+            show: ticketShow,
+            ticket: ticketId,
+            seat: seat,
+            signature: sig,
+          );
+          if (!isSigValid) {
+            _showResultBottomSheet(
+              ticketId,
+              seat: seat,
+              type: CSScanResultType.invalid,
+              title: 'VÉ GIẢ MẠO (SAI CHỮ KÝ SỐ)',
+              time: formatScanTime(DateTime.now()),
+              customer: 'Mã QR thiếu hoặc sai chữ ký bảo mật HMAC-SHA256',
+            );
+            return;
+          }
+
+          final actualShowToRecord = ticketShow.isNotEmpty
+              ? ticketShow
+              : _activeShowId;
+
+          // 2. Kiểm tra trùng bằng lịch sử vĩnh viễn (anti-passback theo mã vé hoặc vị trí ghế)
+          final previous =
+              HiveService.findScanRecord(ticketId) ??
+              HiveService.findScanRecordBySeat(
+                currentRoom,
+                actualShowToRecord,
+                seat,
+              );
           if (previous != null) {
             _showResultBottomSheet(
               ticketId,
@@ -948,9 +982,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
           }
 
           final now = DateTime.now();
-          final actualShowToRecord = ticketShow.isNotEmpty
-              ? ticketShow
-              : _activeShowId;
 
           await HiveService.addScanRecord(
             ScanRecord(
@@ -961,22 +992,44 @@ class _ScannerScreenState extends State<ScannerScreen> {
               scannedAt: now,
             ),
           );
-          await HiveService.saveScannedTicket(code);
+          final enrichedPayload = jsonEncode({
+            ...data,
+            'ticket': ticketId,
+            'room': currentRoom,
+            'seat': seat,
+            'tier': tier,
+            'show': actualShowToRecord,
+            'sig': sig,
+          });
+          await HiveService.saveScannedTicket(enrichedPayload);
 
           ApiClient.syncTicketsToServer(currentRoom, actualShowToRecord).then((
             success,
           ) {
             if (success) {
               debugPrint("Đã bắn vé $ticketId lên server!");
+              if (mounted && ApiClient.lastSyncConflicts.isNotEmpty) {
+                final c = ApiClient.lastSyncConflicts.first;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '⚠️ CẢNH BÁO QUÉT TRÙNG ĐA THIẾT BỊ: Ghế ${c["seat"] ?? seat} đã được quét bởi máy khác!',
+                    ),
+                    backgroundColor: CSAppColors.danger,
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
+              }
             }
           });
 
           if (!mounted) return;
           setState(() {}); // cập nhật bộ đếm "Đã soát"
 
+          final tierText = tier == 'VIP' ? 'Ghế VIP' : 'Ghế Thường';
           _showResultBottomSheet(
             ticketId,
-            seat: seat,
+            seat: '$seat ($tierText)',
             type: CSScanResultType.success,
             title: 'QUÉT THÀNH CÔNG',
             time: formatScanTime(now),

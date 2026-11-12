@@ -62,18 +62,18 @@ export default function Dashboard() {
     return () => clearInterval(alertTimer);
   }, []);
 
-  const handleResolve = async (id) => {
+  const handleResolve = async (id, resolution = 'violation_handled') => {
     try {
-      await resolveAlert(id);
+      await resolveAlert(id, resolution);
       await fetchAlerts();
     } catch (e) {
       alert('Không thể cập nhật trạng thái: ' + e.message);
     }
   };
 
-  const handleResolveRoom = async (roomId, showId) => {
+  const handleResolveRoom = async (roomId, showId, resolution = 'violation_handled') => {
     try {
-      await resolveRoomAlerts(roomId, showId);
+      await resolveRoomAlerts(roomId, showId, resolution);
       await fetchAlerts();
     } catch (e) {
       alert('Không thể xử lý cảnh báo phòng: ' + (e.response?.data?.error || e.message));
@@ -81,7 +81,7 @@ export default function Dashboard() {
   };
 
   // Tính toán số liệu thống kê
-  const illegalCount = alerts.filter(a => a.alert_type === 'illegal_occupant').length;
+  const illegalCount = alerts.filter(a => a.alert_type === 'illegal_occupant' || a.alert_type === 'duplicate_scan' || a.alert_type === 'forged_ticket').length;
   const missingCount = alerts.filter(a => a.alert_type === 'missing_guest').length;
   const overCapCount = alerts.filter(a => a.alert_type === 'over_capacity').length;
   const totalCount = alerts.length;
@@ -483,29 +483,60 @@ export default function Dashboard() {
                     <span>🎟️ Số vé đã quét: <strong style={{ color: '#0F172A' }}>{g.scanned_tickets_count}</strong></span>
                     <span>👥 Số người hiện có: <strong style={{ color: '#0F172A' }}>{g.detected_people_count}</strong></span>
                     <span>⚠️ Ghế cảnh báo: <strong style={{ color: '#DC2626' }}>{g.all_alerted_seats.join(', ') || 'N/A'}</strong></span>
+                    {g.vip_seat_hopping && g.vip_seat_hopping.length > 0 && (
+                      <span style={{ color: '#B45309', fontWeight: 700 }}>
+                        🔄 VIP Seat Hopping: {g.vip_seat_hopping.map(p => `${p.from_seat} ➔ VIP ${p.to_seat}`).join(', ')}
+                      </span>
+                    )}
+                    {g.duplicate_scan_seats && g.duplicate_scan_seats.length > 0 && (
+                      <span style={{ color: '#991B1B', fontWeight: 700 }}>
+                        ⚠️ Quét trùng đa thiết bị: {g.duplicate_scan_seats.join(', ')}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleResolveRoom(g.room_id, g.show_id)}
-                  style={{
-                    background: '#DC2626',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: 6,
-                    fontWeight: 700,
-                    fontSize: 12.5,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)',
-                  }}
-                >
-                  <Check size={14} />
-                  <span>XỬ LÝ TOÀN BỘ PHÒNG ({g.total_alerts} GHẾ)</span>
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => handleResolveRoom(g.room_id, g.show_id, 'violation_handled')}
+                    style={{
+                      background: '#DC2626',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '8px 14px',
+                      borderRadius: 6,
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)',
+                    }}
+                  >
+                    <Check size={14} />
+                    <span>XỬ LÝ VI PHẠM ({g.total_alerts} GHẾ)</span>
+                  </button>
+                  <button
+                    onClick={() => handleResolveRoom(g.room_id, g.show_id, 'ticket_verified')}
+                    style={{
+                      background: '#059669',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '8px 14px',
+                      borderRadius: 6,
+                      fontWeight: 700,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Check size={14} />
+                    <span>VÉ HỢP LỆ SÓT QUÉT (BỔ SUNG TẬP A)</span>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -573,7 +604,47 @@ export default function Dashboard() {
                         fontWeight: 700
                       }}>
                         <UserX size={13} />
-                        Khách lậu (Chiếm ghế không vé)
+                        {a.suspected_type === 'vip_seat_hopping'
+                          ? `🔄 Tự ý nâng hạng VIP (từ ghế Thường ${a.hopping_from})`
+                          : `Khách lậu (Chiếm ghế ${a.seat_tier === 'VIP' ? 'VIP' : 'Thường'} không vé)`}
+                      </span>
+                    );
+                  } else if (a.alert_type === 'duplicate_scan') {
+                    rowClass = 'row-critical';
+                    issueBadge = (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        background: '#FEE2E2',
+                        color: '#991B1B',
+                        border: '1px solid #FECACA',
+                        padding: '3px 9px',
+                        borderRadius: 4,
+                        fontSize: 12,
+                        fontWeight: 700
+                      }}>
+                        <UserX size={13} />
+                        ⚠️ Gian lận quét trùng vé đa thiết bị
+                      </span>
+                    );
+                  } else if (a.alert_type === 'forged_ticket') {
+                    rowClass = 'row-critical';
+                    issueBadge = (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        background: '#FEE2E2',
+                        color: '#991B1B',
+                        border: '1px solid #FECACA',
+                        padding: '3px 9px',
+                        borderRadius: 4,
+                        fontSize: 12,
+                        fontWeight: 700
+                      }}>
+                        <UserX size={13} />
+                        🚨 Vé giả mạo chữ ký số HMAC-SHA256
                       </span>
                     );
                   } else if (a.alert_type === 'over_capacity') {
@@ -648,25 +719,49 @@ export default function Dashboard() {
                         {issueBadge}
                       </td>
                       <td className="align-right">
-                        <button
-                          className="action-btn"
-                          onClick={() => handleResolve(a.id)}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            background: '#FFFFFF',
-                            border: '1px solid #CBD5E1',
-                            color: '#1E293B',
-                            padding: '5px 12px',
-                            borderRadius: 6,
-                            fontSize: 12,
-                            fontWeight: 600
-                          }}
-                        >
-                          <Check size={14} />
-                          <span>Đã xử lý</span>
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: 6 }}>
+                          <button
+                            className="action-btn"
+                            onClick={() => handleResolve(a.id, 'violation_handled')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              background: '#FFFFFF',
+                              border: '1px solid #CBD5E1',
+                              color: '#1E293B',
+                              padding: '5px 10px',
+                              borderRadius: 6,
+                              fontSize: 11.5,
+                              fontWeight: 600
+                            }}
+                          >
+                            <Check size={13} />
+                            <span>Xử lý vi phạm</span>
+                          </button>
+                          {a.alert_type === 'illegal_occupant' && (
+                            <button
+                              className="action-btn"
+                              onClick={() => handleResolve(a.id, 'ticket_verified')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                background: '#ECFDF5',
+                                border: '1px solid #6EE7B7',
+                                color: '#065F46',
+                                padding: '5px 10px',
+                                borderRadius: 6,
+                                fontSize: 11.5,
+                                fontWeight: 700
+                              }}
+                              title="Khách có vé hợp lệ bị sót quét - Bổ sung vào Tập A"
+                            >
+                              <Check size={13} />
+                              <span>Có vé (Bổ sung Tập A)</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

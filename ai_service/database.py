@@ -1,7 +1,9 @@
 import sqlite3
 import os
+import json
 import datetime
-from security import hash_password, verify_password
+from security import hash_password, verify_password, verify_ticket_qr_signature
+from seat_mapper import get_seat_tier, normalize_seat
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "cinesight.db")
 
@@ -16,17 +18,25 @@ SHIFT_LABELS = {
 }
 
 
-def get_dynamic_shift(role: str = None, now: datetime.datetime = None) -> tuple[str, str]:
-    """Tính toán ca làm việc động dựa trên thời điểm đăng nhập/thao tác (Giờ Việt Nam UTC+7):
+def get_dynamic_shift(
+    role: str = None,
+    now: datetime.datetime = None,
+    assigned_shift: str = None,
+) -> tuple[str, str]:
+    """Tính toán ca làm việc động dựa trên thời điểm đăng nhập/thao tác (Giờ Việt Nam UTC+7),
+    kèm biên độ đệm ±30 phút (chuẩn bị đầu ca 07:00-07:30 và bàn giao cuối ca 23:00-23:30)
+    và nối liền 100% khung giờ Quản lý (xóa khoảng trống 16:00-16:30):
     - Nhân viên (Soát vé / Staff):
-        + 07:30 - 13:00: Ca sáng (07:30 - 13:00) [ca_sang]
+        + 07:30 - 13:00 (đệm vào ca từ 07:00): Ca sáng (07:30 - 13:00) [ca_sang]
         + 13:00 - 16:00: Ca chiều (13:00 - 16:00) [ca_chieu]
-        + 16:00 - 23:00: Ca tối (16:00 - 23:00) [ca_toi]
-        + 23:00 - 07:30: Ca đêm (23:00 - 07:30) [ca_dem]
+        + 16:00 - 23:00 (đệm bàn giao đến 23:30): Ca tối (16:00 - 23:00) [ca_toi]
+        + 23:30 - 07:00: Ca đêm (23:00 - 07:30) [ca_dem]
     - Quản lý (Manager / Admin):
-        + 07:30 - 16:00: Ca sáng (07:30 - 16:00) [ca_sang]
-        + 16:00 - 24:00: Ca tối (16:30 - 24:00) [ca_toi]
-        + 00:00 - 07:30: Ca đêm (00:00 - 07:30) [ca_dem]
+        + 07:30 - 16:00 (đệm vào ca từ 07:00): Ca sáng (07:30 - 16:00) [ca_sang]
+        + 16:00 - 24:00: Ca tối (16:00 - 24:00) [ca_toi]
+        + 00:00 - 07:00: Ca đêm (00:00 - 07:30) [ca_dem]
+    Nếu nhân viên có ca phân công (`assigned_shift`) và giờ hiện tại nằm trong khung giờ
+    ca đó ±30 phút thì ưu tiên giữ nguyên ca được phân công.
     """
     if now is None:
         now = datetime.datetime.now(_TZ_VN)
@@ -37,20 +47,31 @@ def get_dynamic_shift(role: str = None, now: datetime.datetime = None) -> tuple[
 
     minute_of_day = now.hour * 60 + now.minute
     is_manager = str(role or "").strip().lower() in ("quản lý", "quan ly", "manager", "admin")
+    assigned = str(assigned_shift or "").strip().lower()
 
     if is_manager:
-        if 450 <= minute_of_day < 960:
+        if assigned == "ca_sang" and 420 <= minute_of_day <= 990:
+            return "ca_sang", "Ca sáng (07:30 - 16:00)"
+        if assigned == "ca_toi" and (930 <= minute_of_day < 1440 or minute_of_day <= 30):
+            return "ca_toi", "Ca tối (16:00 - 24:00)"
+        if 420 <= minute_of_day < 960:
             return "ca_sang", "Ca sáng (07:30 - 16:00)"
         elif 960 <= minute_of_day < 1440:
-            return "ca_toi", "Ca tối (16:30 - 24:00)"
+            return "ca_toi", "Ca tối (16:00 - 24:00)"
         else:
             return "ca_dem", "Ca đêm (00:00 - 07:30)"
     else:
-        if 450 <= minute_of_day < 780:
+        if assigned == "ca_sang" and 420 <= minute_of_day <= 810:
+            return "ca_sang", "Ca sáng (07:30 - 13:00)"
+        if assigned == "ca_chieu" and 750 <= minute_of_day <= 990:
+            return "ca_chieu", "Ca chiều (13:00 - 16:00)"
+        if assigned == "ca_toi" and 930 <= minute_of_day <= 1410:
+            return "ca_toi", "Ca tối (16:00 - 23:00)"
+        if 420 <= minute_of_day < 780:
             return "ca_sang", "Ca sáng (07:30 - 13:00)"
         elif 780 <= minute_of_day < 960:
             return "ca_chieu", "Ca chiều (13:00 - 16:00)"
-        elif 960 <= minute_of_day < 1380:
+        elif 960 <= minute_of_day <= 1410:
             return "ca_toi", "Ca tối (16:00 - 23:00)"
         else:
             return "ca_dem", "Ca đêm (23:00 - 07:30)"
@@ -172,11 +193,31 @@ def init_db():
             show_id TEXT NOT NULL,
             ticket_id TEXT NOT NULL,
             seat_id TEXT NOT NULL,
+            seat_tier TEXT DEFAULT 'STANDARD',
+            signature TEXT NULL,
+            device_id TEXT NULL,
+            scanned_by_id INTEGER NULL,
+            scanned_at TEXT NULL,
+            source TEXT DEFAULT 'QR_SCAN',
             PRIMARY KEY (room_id, show_id, ticket_id),
             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
             FOREIGN KEY (room_id, show_id) REFERENCES showtimes(room_id, show_id) ON DELETE CASCADE
         )
     """)
+    ticket_cols = [row[1] for row in cursor.execute("PRAGMA table_info(tickets)").fetchall()]
+    if "seat_tier" not in ticket_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN seat_tier TEXT DEFAULT 'STANDARD'")
+    if "signature" not in ticket_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN signature TEXT NULL")
+    if "device_id" not in ticket_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN device_id TEXT NULL")
+    if "scanned_by_id" not in ticket_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN scanned_by_id INTEGER NULL")
+    if "scanned_at" not in ticket_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN scanned_at TEXT NULL")
+    if "source" not in ticket_cols:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN source TEXT DEFAULT 'QR_SCAN'")
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS alerts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,10 +227,23 @@ def init_db():
             seat_id TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             resolved BOOLEAN DEFAULT 0,
+            resolution TEXT NULL,
+            resolved_by_id INTEGER NULL,
+            resolved_at TEXT NULL,
+            detail TEXT NULL,
             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
             FOREIGN KEY (room_id, show_id) REFERENCES showtimes(room_id, show_id) ON DELETE CASCADE
         )
     """)
+    alert_cols = [row[1] for row in cursor.execute("PRAGMA table_info(alerts)").fetchall()]
+    if "resolution" not in alert_cols:
+        cursor.execute("ALTER TABLE alerts ADD COLUMN resolution TEXT NULL")
+    if "resolved_by_id" not in alert_cols:
+        cursor.execute("ALTER TABLE alerts ADD COLUMN resolved_by_id INTEGER NULL")
+    if "resolved_at" not in alert_cols:
+        cursor.execute("ALTER TABLE alerts ADD COLUMN resolved_at TEXT NULL")
+    if "detail" not in alert_cols:
+        cursor.execute("ALTER TABLE alerts ADD COLUMN detail TEXT NULL")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS configs (
             key TEXT PRIMARY KEY,
@@ -304,17 +358,134 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_tickets(room_id: str, show_id: str, tickets: list):
+def save_tickets(
+    room_id: str,
+    show_id: str,
+    tickets: list,
+    scanned_by_id: int = None,
+    device_id: str = None,
+    require_signature: bool = False,
+) -> dict:
+    """Lưu danh sách vé đã soát (Tập A) kèm kiểm tra:
+    - Chữ ký số HMAC-SHA256 (`sig`) chống vé giả mạo (Lỗi 1.1).
+    - Xung đột quét trùng ghế/vé từ nhiều thiết bị khi Offline đồng bộ lên (Lỗi 1.2).
+    """
+    now_iso = datetime.datetime.now().astimezone().isoformat()
     conn = _connect()
+    conn.row_factory = sqlite3.Row
+    saved_count = 0
+    conflicts = []
+    forged_tickets = []
     try:
         cursor = conn.cursor()
         clean_room = _require_showtime_exists(cursor, room_id, show_id)
-        if tickets:
-            cursor.executemany(
-                "INSERT OR IGNORE INTO tickets (room_id, show_id, ticket_id, seat_id) VALUES (?, ?, ?, ?)",
-                [(clean_room, show_id, t['ticket'], t['seat']) for t in tickets]
-            )
+        clean_show = str(show_id).strip()
+        for t in (tickets or []):
+            t_id = str(t.get("ticket") or "").strip()
+            s_id = normalize_seat(t.get("seat") or "")
+            if not t_id or not s_id:
+                continue
+            s_tier = str(t.get("tier") or get_seat_tier(s_id, clean_room)).upper()
+            if s_tier not in ("STANDARD", "VIP"):
+                s_tier = get_seat_tier(s_id, clean_room)
+            sig = str(t.get("sig") or "").strip()
+            t_dev = str(t.get("device_id") or device_id or "").strip() or None
+            t_time = str(t.get("scanned_at") or now_iso).strip()
+
+            # 1. Xác thực chữ ký số HMAC-SHA256 nếu có cung cấp sig hoặc bắt buộc require_signature
+            if sig or require_signature:
+                if not verify_ticket_qr_signature(clean_room, clean_show, t_id, s_id, sig):
+                    forged_info = {
+                        "ticket": t_id,
+                        "seat": s_id,
+                        "device_id": t_dev,
+                        "reason": "invalid_hmac_signature",
+                    }
+                    forged_tickets.append(forged_info)
+                    # Tạo cảnh báo vé giả mạo trên Dashboard SOC
+                    cursor.execute(
+                        "SELECT id FROM alerts WHERE room_id=? AND show_id=? AND seat_id=? AND alert_type='forged_ticket' AND resolved=0",
+                        (clean_room, clean_show, s_id),
+                    )
+                    if not cursor.fetchone():
+                        cursor.execute(
+                            "INSERT INTO alerts (room_id, show_id, alert_type, seat_id, timestamp, detail) VALUES (?, ?, 'forged_ticket', ?, ?, ?)",
+                            (clean_room, clean_show, s_id, now_iso, json.dumps(forged_info, ensure_ascii=False)),
+                        )
+                    continue
+
+            # 2. Kiểm tra xung đột quét trùng (cùng ghế nhưng khác mã vé, hoặc cùng vé/ghế nhưng quét từ thiết bị khác)
+            existing_rows = cursor.execute(
+                "SELECT ticket_id, seat_id, device_id, scanned_by_id, source FROM tickets WHERE room_id=? AND show_id=? AND (seat_id=? OR ticket_id=?)",
+                (clean_room, clean_show, s_id, t_id),
+            ).fetchall()
+
+            if not existing_rows:
+                cursor.execute(
+                    """
+                    INSERT INTO tickets (room_id, show_id, ticket_id, seat_id, seat_tier, signature, device_id, scanned_by_id, scanned_at, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'QR_SCAN')
+                    """,
+                    (clean_room, clean_show, t_id, s_id, s_tier, sig or None, t_dev, scanned_by_id, t_time),
+                )
+                saved_count += 1
+            else:
+                ex = existing_rows[0]
+                ex_ticket = ex["ticket_id"]
+                ex_seat = ex["seat_id"]
+                ex_dev = ex["device_id"]
+                ex_source = ex["source"] or "QR_SCAN"
+
+                # Nếu ghế được tạo tự động từ 'ticket_verified' trước đó và nay vé thật đồng bộ lên -> nâng cấp sang QR_SCAN
+                if ex_source == "MANUAL_VERIFIED" and ex_seat == s_id:
+                    cursor.execute(
+                        "DELETE FROM tickets WHERE room_id=? AND show_id=? AND ticket_id=?",
+                        (clean_room, clean_show, ex_ticket),
+                    )
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO tickets (room_id, show_id, ticket_id, seat_id, seat_tier, signature, device_id, scanned_by_id, scanned_at, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'QR_SCAN')
+                        """,
+                        (clean_room, clean_show, t_id, s_id, s_tier, sig or None, t_dev, scanned_by_id, t_time),
+                    )
+                    saved_count += 1
+                    continue
+
+                is_different_ticket_same_seat = (ex_seat == s_id and ex_ticket != t_id)
+                is_different_device_same_ticket = (
+                    ex_ticket == t_id and ex_dev and t_dev and ex_dev != t_dev
+                )
+
+                if is_different_ticket_same_seat or is_different_device_same_ticket:
+                    conflict_info = {
+                        "seat": s_id,
+                        "ticket": t_id,
+                        "existing_ticket": ex_ticket,
+                        "device_id": t_dev,
+                        "existing_device_id": ex_dev,
+                        "reason": "different_ticket_same_seat"
+                        if is_different_ticket_same_seat
+                        else "duplicate_scan_multi_device",
+                    }
+                    conflicts.append(conflict_info)
+                    cursor.execute(
+                        "SELECT id FROM alerts WHERE room_id=? AND show_id=? AND seat_id=? AND alert_type='duplicate_scan' AND resolved=0",
+                        (clean_room, clean_show, s_id),
+                    )
+                    if not cursor.fetchone():
+                        cursor.execute(
+                            "INSERT INTO alerts (room_id, show_id, alert_type, seat_id, timestamp, detail) VALUES (?, ?, 'duplicate_scan', ?, ?, ?)",
+                            (clean_room, clean_show, s_id, now_iso, json.dumps(conflict_info, ensure_ascii=False)),
+                        )
+                # Ngược lại: cùng mã vé + cùng ghế + cùng thiết bị (idempotent retry) -> bỏ qua an toàn
+
         conn.commit()
+        return {
+            "saved_count": saved_count,
+            "conflicts": conflicts,
+            "forged_tickets": forged_tickets,
+        }
     finally:
         conn.close()
 
@@ -369,23 +540,46 @@ def clear_alerts(room_id: str = None, show_id: str = None):
 
 init_db()
 
-def save_alerts(room_id: str, show_id: str, alert_type: str, seats: list):
+def save_alerts(room_id: str, show_id: str, alert_type: str, seats: list, details_by_seat: dict = None):
     current_time = datetime.datetime.now().astimezone().isoformat()
     conn = _connect()
     try:
         cursor = conn.cursor()
         clean_room = _require_showtime_exists(cursor, room_id, show_id)
+        details_map = details_by_seat or {}
         # Chỉ lưu nếu ghế chưa có cảnh báo chưa giải quyết
         for seat in seats:
-            if seat is None:
-                cursor.execute("SELECT id FROM alerts WHERE room_id=? AND show_id=? AND seat_id IS NULL AND alert_type=? AND resolved=0", 
-                              (clean_room, show_id, alert_type))
+            detail_val = details_map.get(seat)
+            if isinstance(detail_val, (dict, list)):
+                detail_str = json.dumps(detail_val, ensure_ascii=False)
+            elif detail_val is not None:
+                detail_str = str(detail_val)
+            elif seat is not None:
+                detail_str = json.dumps({"seat_tier": get_seat_tier(seat, clean_room)}, ensure_ascii=False)
             else:
-                cursor.execute("SELECT id FROM alerts WHERE room_id=? AND show_id=? AND seat_id=? AND alert_type=? AND resolved=0", 
-                              (clean_room, show_id, seat, alert_type))
-            if not cursor.fetchone():
-                cursor.execute("INSERT INTO alerts (room_id, show_id, alert_type, seat_id, timestamp) VALUES (?, ?, ?, ?, ?)",
-                              (clean_room, show_id, alert_type, seat, current_time))
+                detail_str = None
+
+            if seat is None:
+                cursor.execute(
+                    "SELECT id FROM alerts WHERE room_id=? AND show_id=? AND seat_id IS NULL AND alert_type=? AND resolved=0",
+                    (clean_room, show_id, alert_type),
+                )
+            else:
+                cursor.execute(
+                    "SELECT id FROM alerts WHERE room_id=? AND show_id=? AND seat_id=? AND alert_type=? AND resolved=0",
+                    (clean_room, show_id, seat, alert_type),
+                )
+            existing = cursor.fetchone()
+            if not existing:
+                cursor.execute(
+                    "INSERT INTO alerts (room_id, show_id, alert_type, seat_id, timestamp, detail) VALUES (?, ?, ?, ?, ?, ?)",
+                    (clean_room, show_id, alert_type, seat, current_time, detail_str),
+                )
+            elif detail_str:
+                cursor.execute(
+                    "UPDATE alerts SET detail=? WHERE id=?",
+                    (detail_str, existing[0]),
+                )
         conn.commit()
     finally:
         conn.close()
@@ -394,9 +588,10 @@ def save_alerts(room_id: str, show_id: str, alert_type: str, seats: list):
 def refresh_showtime_alerts(room_id: str, show_id: str, alert_result: dict) -> dict:
     """Quy tắc 15.5 (Idempotent Alert Refresh):
     Khi phân tích lại cùng (room_id, show_id) ở mốc sau (VD: T-3 sau T-5):
-    - Tự động đóng (resolved = 1) các cảnh báo đang mở (resolved = 0) nếu ghế đó nay đã hợp lệ.
-    - Lưu các cảnh báo mới phát sinh mà không tạo trùng lặp.
+    - Tự động đóng (resolved = 1, resolution = 'auto_resolved') các cảnh báo đang mở (resolved = 0) nếu ghế đó nay đã hợp lệ.
+    - Lưu các cảnh báo mới phát sinh mà không tạo trùng lặp, kèm gắn nhãn VIP Seat Hopping nếu có.
     """
+    now_iso = datetime.datetime.now().astimezone().isoformat()
     conn = _connect()
     conn.row_factory = sqlite3.Row
     auto_resolved = 0
@@ -426,22 +621,49 @@ def refresh_showtime_alerts(room_id: str, show_id: str, alert_result: dict) -> d
         if ids_to_resolve:
             placeholders = ",".join("?" for _ in ids_to_resolve)
             cursor.execute(
-                f"UPDATE alerts SET resolved = 1 WHERE id IN ({placeholders})",
-                tuple(ids_to_resolve),
+                f"UPDATE alerts SET resolved = 1, resolution = 'auto_resolved', resolved_at = ? WHERE id IN ({placeholders})",
+                (now_iso, *ids_to_resolve),
             )
             auto_resolved = len(ids_to_resolve)
         conn.commit()
     finally:
         conn.close()
 
+    hopping_list = alert_result.get("vip_seat_hopping") or []
+    illegal_details = {}
+    missing_details = {}
+    for s in (alert_result.get("illegal_occupants") or []):
+        illegal_details[s] = {"seat_tier": get_seat_tier(s, room_id)}
+    for s in (alert_result.get("missing_guests") or []):
+        missing_details[s] = {"seat_tier": get_seat_tier(s, room_id)}
+    for h in hopping_list:
+        to_vip = h.get("to_seat")
+        from_std = h.get("from_seat")
+        if to_vip:
+            illegal_details[to_vip] = {
+                "seat_tier": "VIP",
+                "suspected_type": "vip_seat_hopping",
+                "hopping_from": from_std,
+                "same_headcount": bool(h.get("same_headcount")),
+                "message": h.get("message") or f"Nghi vấn khách tự ý chuyển từ ghế Thường {from_std} lên ghế VIP {to_vip}",
+            }
+        if from_std:
+            missing_details[from_std] = {
+                "seat_tier": "STANDARD",
+                "suspected_type": "vip_seat_hopping",
+                "hopping_to": to_vip,
+                "same_headcount": bool(h.get("same_headcount")),
+                "message": h.get("message") or f"Nghi vấn khách rời ghế Thường {from_std} lên ghế VIP {to_vip}",
+            }
+
     if alert_result.get("illegal_occupants"):
-        save_alerts(room_id, show_id, "illegal_occupant", alert_result["illegal_occupants"])
+        save_alerts(room_id, show_id, "illegal_occupant", alert_result["illegal_occupants"], details_by_seat=illegal_details)
     if alert_result.get("missing_guests"):
-        save_alerts(room_id, show_id, "missing_guest", alert_result["missing_guests"])
+        save_alerts(room_id, show_id, "missing_guest", alert_result["missing_guests"], details_by_seat=missing_details)
     if alert_result.get("over_capacity"):
         save_alerts(room_id, show_id, "over_capacity", [None])
 
-    return {"auto_resolved_count": auto_resolved}
+    return {"auto_resolved_count": auto_resolved, "vip_seat_hopping": hopping_list}
 
 def cleanup_finished_showtimes_alerts(cursor):
     """Tự động đóng (resolved = 1) tất cả cảnh báo của các suất chiếu đã kết thúc trong quá khứ,
@@ -474,12 +696,26 @@ def get_active_alerts(room_id: str = None):
     conn.close()
     
     alerts_list = [dict(r) for r in rows]
-    # Gắn thêm context (số vé đã quét, số người AI đếm, chùm ghế vi phạm) để phục vụ thông báo
+    # Gắn thêm context (số vé đã quét, số người AI đếm, chùm ghế vi phạm, hạng ghế & VIP Seat Hopping)
     if alerts_list:
         try:
             grouped = get_grouped_active_alerts(room_id)
             meta_map = {(g["room_id"], g["show_id"]): g for g in grouped}
             for a in alerts_list:
+                sid = a.get("seat_id")
+                a["seat_tier"] = get_seat_tier(sid, a.get("room_id")) if sid else None
+                parsed_detail = {}
+                if a.get("detail"):
+                    try:
+                        parsed_detail = json.loads(a["detail"]) if isinstance(a["detail"], str) else dict(a["detail"])
+                    except Exception:
+                        parsed_detail = {}
+                a["detail_parsed"] = parsed_detail
+                a["suspected_type"] = parsed_detail.get("suspected_type")
+                a["hopping_from"] = parsed_detail.get("hopping_from")
+                a["hopping_to"] = parsed_detail.get("hopping_to")
+                a["hopping_message"] = parsed_detail.get("message")
+
                 g = meta_map.get((a.get("room_id"), a.get("show_id")))
                 if g:
                     a["scanned_tickets_count"] = g["scanned_tickets_count"]
@@ -488,6 +724,9 @@ def get_active_alerts(room_id: str = None):
                     a["room_illegal_seats"] = g["illegal_seats"]
                     a["room_missing_seats"] = g["missing_seats"]
                     a["all_alerted_seats"] = g["all_alerted_seats"]
+                    a["vip_seat_hopping"] = g.get("vip_seat_hopping", [])
+                    a["duplicate_scan_seats"] = g.get("duplicate_scan_seats", [])
+                    a["forged_ticket_seats"] = g.get("forged_ticket_seats", [])
                 else:
                     a["scanned_tickets_count"] = 0
                     a["detected_people_count"] = 0
@@ -495,16 +734,21 @@ def get_active_alerts(room_id: str = None):
                     a["room_illegal_seats"] = [a["seat_id"]] if a.get("seat_id") else []
                     a["room_missing_seats"] = []
                     a["all_alerted_seats"] = [a["seat_id"]] if a.get("seat_id") else []
+                    a["vip_seat_hopping"] = []
+                    a["duplicate_scan_seats"] = []
+                    a["forged_ticket_seats"] = []
         except Exception:
             pass
     return alerts_list
 
 def get_grouped_active_alerts(room_id: str = None) -> list:
     """Gom nhóm các cảnh báo đang mở (resolved = 0) theo từng Phòng & Suất chiếu.
-    Mỗi nhóm cung cấp đầy đủ 3 chỉ số theo yêu cầu:
+    Mỗi nhóm cung cấp đầy đủ:
     1. scanned_tickets_count: Số vé đã quét của rạp này (Tập A)
     2. detected_people_count: Số người hiện có trong rạp (Camera AI đếm)
-    3. all_alerted_seats: Danh sách các ghế được cảnh báo (illegal/missing)
+    3. all_alerted_seats: Danh sách các ghế được cảnh báo
+    4. vip_seat_hopping: Các cặp nghi vấn tự ý chuyển từ ghế Thường lên ghế VIP (Lỗi 4)
+    5. duplicate_scan_seats & forged_ticket_seats: Các ghế bị quét trùng đa thiết bị hoặc vé giả (Lỗi 1.1 & 1.2)
     """
     clean_room = _normalize_room_id(room_id)
     conn = _connect()
@@ -535,6 +779,8 @@ def get_grouped_active_alerts(room_id: str = None) -> list:
                     "alert_ids": [],
                     "illegal_seats": [],
                     "missing_seats": [],
+                    "duplicate_scan_seats": [],
+                    "forged_ticket_seats": [],
                     "over_capacity": False,
                     "raw_alerts": [],
                 }
@@ -549,6 +795,12 @@ def get_grouped_active_alerts(room_id: str = None) -> list:
             elif atype == "missing_guest" and sid:
                 if sid not in g["missing_seats"]:
                     g["missing_seats"].append(sid)
+            elif atype == "duplicate_scan" and sid:
+                if sid not in g["duplicate_scan_seats"]:
+                    g["duplicate_scan_seats"].append(sid)
+            elif atype == "forged_ticket" and sid:
+                if sid not in g["forged_ticket_seats"]:
+                    g["forged_ticket_seats"].append(sid)
             elif atype == "over_capacity":
                 g["over_capacity"] = True
 
@@ -579,7 +831,25 @@ def get_grouped_active_alerts(room_id: str = None) -> list:
 
             g["illegal_seats"].sort()
             g["missing_seats"].sort()
-            all_seats = list(dict.fromkeys(g["illegal_seats"] + g["missing_seats"]))
+            g["duplicate_scan_seats"].sort()
+            g["forged_ticket_seats"].sort()
+            all_seats = list(dict.fromkeys(
+                g["illegal_seats"] + g["missing_seats"] + g["duplicate_scan_seats"] + g["forged_ticket_seats"]
+            ))
+
+            # Suy luận VIP Seat Hopping trên tập ghế cảnh báo hiện hành của phòng
+            illegal_vip = [s for s in g["illegal_seats"] if get_seat_tier(s, r_id) == "VIP"]
+            missing_std = [s for s in g["missing_seats"] if get_seat_tier(s, r_id) == "STANDARD"]
+            vip_seat_hopping = []
+            for std_s, vip_s in zip(missing_std, illegal_vip):
+                vip_seat_hopping.append({
+                    "from_seat": std_s,
+                    "to_seat": vip_s,
+                    "from_tier": "STANDARD",
+                    "to_tier": "VIP",
+                    "same_headcount": detected_count == scanned_count,
+                    "message": f"Nghi vấn khách tự ý chuyển từ ghế Thường {std_s} lên ghế VIP {vip_s}",
+                })
 
             result.append({
                 "room_id": r_id,
@@ -591,6 +861,9 @@ def get_grouped_active_alerts(room_id: str = None) -> list:
                 "alert_ids": g["alert_ids"],
                 "illegal_seats": g["illegal_seats"],
                 "missing_seats": g["missing_seats"],
+                "duplicate_scan_seats": g["duplicate_scan_seats"],
+                "forged_ticket_seats": g["forged_ticket_seats"],
+                "vip_seat_hopping": vip_seat_hopping,
                 "all_alerted_seats": all_seats,
                 "over_capacity": g["over_capacity"],
             })
@@ -599,16 +872,47 @@ def get_grouped_active_alerts(room_id: str = None) -> list:
     finally:
         conn.close()
 
-def resolve_room_alerts(room_id: str, show_id: str) -> int:
-    """Xử lý hàng loạt toàn bộ cảnh báo đang mở của một phòng & suất chiếu (One-Tap Resolve)."""
+def resolve_room_alerts(
+    room_id: str,
+    show_id: str,
+    resolution: str = "violation_handled",
+    resolver_id: int = None,
+) -> int:
+    """Xử lý hàng loạt cảnh báo đang mở của một phòng & suất chiếu (UC06).
+    Hỗ trợ 2 kết quả nghiệp vụ (Lỗi 3):
+    - 'violation_handled': Đã nhắc nhở khách về đúng ghế / mời ra ngoài (chỉ đóng cảnh báo hiện tại).
+    - 'ticket_verified': Xác nhận khách có vé hợp lệ bị sót quét -> bổ sung các ghế thuộc B \\ A
+      vào Tập A (`tickets` với source='MANUAL_VERIFIED') để Mốc 2 và Mốc 3 không báo động giả lại.
+    """
     clean_room = _normalize_room_id(room_id)
     clean_show = str(show_id).strip()
+    clean_res = "ticket_verified" if str(resolution or "").strip().lower() == "ticket_verified" else "violation_handled"
+    now_iso = datetime.datetime.now().astimezone().isoformat()
     conn = _connect()
     try:
         cursor = conn.cursor()
+        if clean_res == "ticket_verified":
+            open_illegal = cursor.execute(
+                "SELECT DISTINCT seat_id FROM alerts WHERE room_id = ? AND show_id = ? AND resolved = 0 AND alert_type = 'illegal_occupant' AND seat_id IS NOT NULL",
+                (clean_room, clean_show),
+            ).fetchall()
+            for row in open_illegal:
+                sid = normalize_seat(row[0])
+                if sid:
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO tickets (room_id, show_id, ticket_id, seat_id, seat_tier, scanned_by_id, scanned_at, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'MANUAL_VERIFIED')
+                        """,
+                        (clean_room, clean_show, f"VERIFIED-{sid}", sid, get_seat_tier(sid, clean_room), resolver_id, now_iso),
+                    )
         cursor.execute(
-            "UPDATE alerts SET resolved = 1 WHERE room_id = ? AND show_id = ? AND resolved = 0",
-            (clean_room, clean_show),
+            """
+            UPDATE alerts
+            SET resolved = 1, resolution = ?, resolved_by_id = ?, resolved_at = ?
+            WHERE room_id = ? AND show_id = ? AND resolved = 0
+            """,
+            (clean_res, resolver_id, now_iso, clean_room, clean_show),
         )
         count = cursor.rowcount
         conn.commit()
@@ -647,15 +951,66 @@ def get_all_alerts(room_id: str = None, alert_type: str = None, status: str = No
     return [dict(r) for r in rows]
 
 
-def resolve_alert(alert_id: int):
+def resolve_alert(
+    alert_id: int,
+    resolution: str = "violation_handled",
+    resolver_id: int = None,
+    single_only: bool = False,
+):
+    """Xử lý cảnh báo đơn lẻ hoặc theo phòng (UC06) kèm 2 lựa chọn kết quả (Lỗi 3):
+    - 'violation_handled': Đã xử lý vi phạm (mời khách về đúng ghế / ra ngoài).
+    - 'ticket_verified': Xác nhận khách có vé hợp lệ bị sót quét -> bổ sung ghế vào Tập A (`tickets`).
+    """
+    clean_res = "ticket_verified" if str(resolution or "").strip().lower() == "ticket_verified" else "violation_handled"
+    now_iso = datetime.datetime.now().astimezone().isoformat()
     conn = _connect()
     try:
         cursor = conn.cursor()
-        row = cursor.execute("SELECT room_id, show_id FROM alerts WHERE id=?", (alert_id,)).fetchone()
-        if row and row[0] and row[1]:
-            cursor.execute("UPDATE alerts SET resolved=1 WHERE room_id=? AND show_id=? AND resolved=0", (row[0], row[1]))
+        row = cursor.execute(
+            "SELECT room_id, show_id, seat_id, alert_type FROM alerts WHERE id=?",
+            (alert_id,),
+        ).fetchone()
+        if not row:
+            return
+        r_id, s_id, seat_id, a_type = row[0], row[1], row[2], row[3]
+
+        if clean_res == "ticket_verified":
+            if single_only or not (r_id and s_id):
+                if seat_id and a_type == "illegal_occupant":
+                    norm_s = normalize_seat(seat_id)
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO tickets (room_id, show_id, ticket_id, seat_id, seat_tier, scanned_by_id, scanned_at, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'MANUAL_VERIFIED')
+                        """,
+                        (r_id, s_id, f"VERIFIED-{norm_s}", norm_s, get_seat_tier(norm_s, r_id), resolver_id, now_iso),
+                    )
+            else:
+                open_illegal = cursor.execute(
+                    "SELECT DISTINCT seat_id FROM alerts WHERE room_id=? AND show_id=? AND resolved=0 AND alert_type='illegal_occupant' AND seat_id IS NOT NULL",
+                    (r_id, s_id),
+                ).fetchall()
+                for ir in open_illegal:
+                    norm_s = normalize_seat(ir[0])
+                    if norm_s:
+                        cursor.execute(
+                            """
+                            INSERT OR IGNORE INTO tickets (room_id, show_id, ticket_id, seat_id, seat_tier, scanned_by_id, scanned_at, source)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 'MANUAL_VERIFIED')
+                            """,
+                            (r_id, s_id, f"VERIFIED-{norm_s}", norm_s, get_seat_tier(norm_s, r_id), resolver_id, now_iso),
+                        )
+
+        if not single_only and r_id and s_id:
+            cursor.execute(
+                "UPDATE alerts SET resolved=1, resolution=?, resolved_by_id=?, resolved_at=? WHERE room_id=? AND show_id=? AND resolved=0",
+                (clean_res, resolver_id, now_iso, r_id, s_id),
+            )
         else:
-            cursor.execute("UPDATE alerts SET resolved=1 WHERE id=?", (alert_id,))
+            cursor.execute(
+                "UPDATE alerts SET resolved=1, resolution=?, resolved_by_id=?, resolved_at=? WHERE id=?",
+                (clean_res, resolver_id, now_iso, alert_id),
+            )
         conn.commit()
     finally:
         conn.close()
@@ -849,8 +1204,8 @@ def authenticate_employee(username: str, password: str):
             return None
         if row["is_active"] == 0:
             return None
-        # Tự động tính ca làm việc theo giờ đăng nhập thực tế
-        dyn_shift_code, dyn_shift_label = get_dynamic_shift(row["role"])
+        # Tự động tính ca làm việc theo giờ đăng nhập thực tế (kết hợp ca phân công nếu trong đệm ±30 phút)
+        dyn_shift_code, dyn_shift_label = get_dynamic_shift(row["role"], assigned_shift=row["shift"])
         conn.execute(
             "UPDATE employees SET last_seen_at=?, shift=? WHERE id=?",
             (_now_vn_iso(), dyn_shift_code, row["id"])

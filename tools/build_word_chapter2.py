@@ -486,7 +486,7 @@ def build_docx():
         "Hiện nay, việc kiểm soát vé tại cửa rạp và đối soát số lượng khán giả thực tế trong phòng chiếu còn gặp nhiều khó khăn như:"
     )
     add_bullet(
-        " Khán giả sau khi qua cổng soát vé có thể tự ý di chuyển từ ghế thường lên các hàng ghế VIP/Sweetbox đang trống, hoặc cố tình ở lại phòng chiếu sau khi hết phim để xem tiếp các suất chiếu kế tiếp mà không mua vé.",
+        " Khán giả sau khi qua cổng soát vé có thể tự ý di chuyển từ ghế thường lên các hàng ghế VIP đang trống, hoặc cố tình ở lại phòng chiếu sau khi hết phim để xem tiếp các suất chiếu kế tiếp mà không mua vé.",
         bold_prefix="Thất thoát doanh thu và hiện tượng gian lận ('xem phim chui'):"
     )
     add_bullet(
@@ -516,7 +516,7 @@ def build_docx():
         bold_prefix="Quản lý người dùng (CRUD Nhân sự & Ca trực tự động):"
     )
     add_bullet(
-        " Quản lý danh mục phim chiếu rạp (tên phim, thời lượng, thể loại, phân loại độ tuổi P/K/T13/T16/T18, poster) đồng bộ từ cơ sở dữ liệu điện ảnh quốc tế TMDB. Quản lý cấu hình 4 phòng chiếu kèm sơ đồ ghế 2D trực quan (Phòng 1, 2, 4 gồm 136 ghế - 12 hàng A..L; Phòng 3 VIP/Sweetbox gồm 132 ghế - 10 hàng A..J). Tạo suất chiếu thủ công hoặc kích hoạt trình lập lịch chiếu tự động chống chồng lấn khung giờ (tự động cộng 15 phút dọn vệ sinh giữa hai suất).",
+        " Quản lý danh mục phim chiếu rạp (tên phim, thời lượng, thể loại, phân loại độ tuổi P/K/T13/T16/T18, poster) đồng bộ từ cơ sở dữ liệu điện ảnh quốc tế TMDB. Quản lý cấu hình 4 phòng chiếu kèm sơ đồ ghế 2D trực quan (Phòng 1, 2, 4 gồm 136 ghế - 12 hàng A..L; Phòng 3 VIP gồm 132 ghế - 10 hàng A..J). Tạo suất chiếu thủ công hoặc kích hoạt trình lập lịch chiếu tự động chống chồng lấn khung giờ (tự động cộng 15 phút dọn vệ sinh giữa hai suất).",
         bold_prefix="Quản lý danh mục phim TMDB, phòng chiếu và lịch chiếu:"
     )
     add_bullet(

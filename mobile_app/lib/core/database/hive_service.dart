@@ -76,6 +76,21 @@ class HiveService {
     final settingsBox = await Hive.openBox<String>(_settingsBoxName);
     final savedTheme = settingsBox.get('is_light_mode');
     lightModeNotifier.value = savedTheme == null ? true : (savedTheme == 'true');
+    if (settingsBox.get('device_id') == null) {
+      final rand = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+      await settingsBox.put('device_id', 'mobile_$rand');
+    }
+  }
+
+  /// Lấy mã định danh thiết bị duy nhất (phục vụ phát hiện quét trùng đa thiết bị UC04)
+  static String getDeviceId() {
+    try {
+      if (!Hive.isBoxOpen(_settingsBoxName)) return 'mobile_default';
+      final box = Hive.box<String>(_settingsBoxName);
+      return box.get('device_id') ?? 'mobile_default';
+    } catch (_) {
+      return 'mobile_default';
+    }
   }
 
   /// Chuyển đổi chế độ Sáng (true) / Tối (false) và lưu vào bộ nhớ máy
@@ -180,6 +195,21 @@ class HiveService {
   static ScanRecord? findScanRecord(String ticket) {
     final raw = Hive.box<String>(_historyBoxName).get(ticket);
     return raw == null ? null : ScanRecord.tryParse(raw);
+  }
+
+  /// Tìm bản ghi quét trước đó theo vị trí ghế trong cùng phòng & suất chiếu.
+  static ScanRecord? findScanRecordBySeat(String room, String show, String seat) {
+    final normSeat = seat.trim().toUpperCase();
+    for (final raw in Hive.box<String>(_historyBoxName).values) {
+      final rec = ScanRecord.tryParse(raw);
+      if (rec != null &&
+          rec.room == room &&
+          rec.show == show &&
+          rec.seat.trim().toUpperCase() == normSeat) {
+        return rec;
+      }
+    }
+    return null;
   }
 
   /// Lịch sử quét, mới nhất trước. Lọc theo phòng / suất nếu truyền vào.

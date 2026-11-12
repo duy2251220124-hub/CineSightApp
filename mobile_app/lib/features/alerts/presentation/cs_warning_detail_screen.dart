@@ -27,25 +27,90 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
 
   String _formatRoom(String? r) => formatRoomName(r);
 
+  Future<void> _submitResolution(String resolution) async {
+    final alert = widget.alertData ?? {};
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    setState(() => _isResolving = true);
+    final roomId = alert['room_id']?.toString();
+    final showId = alert['show_id']?.toString();
+    bool success = await ApiClient.resolveAlert(
+      widget.alertId,
+      resolution: resolution,
+    );
+    if (!success &&
+        roomId != null &&
+        showId != null &&
+        roomId.isNotEmpty &&
+        showId.isNotEmpty) {
+      success = await ApiClient.resolveRoomAlerts(
+        roomId,
+        showId,
+        resolution: resolution,
+      );
+    }
+    if (!mounted) return;
+    setState(() => _isResolving = false);
+    if (success) {
+      final msg = resolution == 'ticket_verified'
+          ? 'Đã xác nhận khách có vé hợp lệ & bổ sung ghế vào Tập A!'
+          : 'Đã đánh dấu xử lý vi phạm thành công!';
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: CSAppColors.success,
+        ),
+      );
+      widget.onResolved?.call();
+      navigator.pop(true);
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Không thể cập nhật, vui lòng thử lại!'),
+          backgroundColor: CSAppColors.danger,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final alert = widget.alertData ?? {};
     final type = alert['alert_type']?.toString() ?? 'illegal_occupant';
-    final isIllegal = type == 'illegal_occupant';
+    final isHopping = alert['suspected_type'] == 'vip_seat_hopping';
+    final isDup = type == 'duplicate_scan';
+    final isForged = type == 'forged_ticket';
+    final isIllegal = type == 'illegal_occupant' || isDup || isForged;
     final isMissing = type == 'missing_guest';
     final color = isIllegal ? CSAppColors.danger : (isMissing ? CSAppColors.warning : CSAppColors.primary);
 
-    final title = isIllegal
-        ? 'Khách ngồi sai ghế / Không vé'
-        : (isMissing ? 'Ghế trống bất thường (Vắng khách)' : 'Cảnh báo vượt tải');
+    final title = isHopping
+        ? 'Nghi vấn tự ý nâng hạng ghế VIP (VIP Seat Hopping)'
+        : isDup
+            ? 'Gian lận quét trùng vé đa thiết bị'
+            : isForged
+                ? 'Phát hiện vé giả mạo chữ ký số'
+                : isIllegal
+                    ? 'Khách ngồi sai ghế / Không vé'
+                    : (isMissing ? 'Ghế trống bất thường (Vắng khách)' : 'Cảnh báo vượt tải');
     
-    final desc = isIllegal
-        ? 'Hệ thống AI camera phát hiện có người ngồi tại vị trí ghế này nhưng không có dữ liệu vé hợp lệ đã soát tại cửa.'
-        : (isMissing
-            ? 'Vé cho ghế này đã được nhân viên soát hợp lệ tại cửa, nhưng camera AI ghi nhận thực tế ghế đang để trống.'
-            : 'Tổng số người thực tế trong phòng vượt quá số lượng ghế quy định.');
+    final desc = isHopping
+        ? (alert['hopping_message']?.toString() ??
+            'Hệ thống phát hiện ghế VIP đang có người ngồi chưa soát vé đồng thời có ghế Thường đã soát vé nhưng để trống.')
+        : isDup
+            ? (alert['detail']?.toString() ??
+                'Phát hiện vé cho vị trí ghế này được quét trùng trên nhiều thiết bị khi đồng bộ Offline.')
+            : isForged
+                ? (alert['detail']?.toString() ??
+                    'Mã QR vé không khớp chữ ký số HMAC-SHA256 của hệ thống.')
+                : isIllegal
+                    ? 'Hệ thống AI camera phát hiện có người ngồi tại vị trí ghế này nhưng không có dữ liệu vé hợp lệ đã soát tại cửa.'
+                    : (isMissing
+                        ? 'Vé cho ghế này đã được nhân viên soát hợp lệ tại cửa, nhưng camera AI ghi nhận thực tế ghế đang để trống.'
+                        : 'Tổng số người thực tế trong phòng vượt quá số lượng ghế quy định.');
 
     final seat = alert['seat_id'] ?? alert['seats'] ?? 'N/A';
+    final tier = alert['seat_tier']?.toString() ?? ApiClient.getSeatTier('$seat');
     final room = _formatRoom(alert['room_id']?.toString());
     final show = alert['show_id']?.toString() ?? 'N/A';
 
@@ -112,7 +177,20 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        _buildRow('Vị trí ghế vi phạm:', '$seat', isBold: true, highlightColor: color),
+                        _buildRow(
+                          'Vị trí ghế vi phạm:',
+                          '$seat (${tier == "VIP" ? "Ghế VIP" : "Ghế Thường"})',
+                          isBold: true,
+                          highlightColor: color,
+                        ),
+                        if (isHopping) ...[
+                          const Divider(height: 18),
+                          _buildRow(
+                            'Đối chiếu nâng hạng:',
+                            'Từ ghế Thường ${alert["hopping_from"]} ➔ VIP $seat',
+                            highlightColor: const Color(0xFFD97706),
+                          ),
+                        ],
                         const Divider(height: 18),
                         _buildRow('Số vé đã quét:', '${alert['scanned_tickets_count'] ?? 'N/A'} vé'),
                         const Divider(height: 18),
@@ -167,44 +245,38 @@ class _CSWarningDetailScreenState extends State<CSWarningDetailScreen> {
                   ),
                   const SizedBox(height: 18),
                   CSPrimaryButton(
-                    label: _isResolving ? 'Đang cập nhật...' : 'Xác nhận đã xử lý vi phạm',
+                    label: _isResolving
+                        ? 'Đang cập nhật...'
+                        : '1. Đã xử lý vi phạm (Yêu cầu về đúng ghế)',
                     icon: Icons.check_circle_outline,
                     onPressed: _isResolving
                         ? null
-                        : () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            final navigator = Navigator.of(context);
-                            setState(() => _isResolving = true);
-                            final roomId = alert['room_id']?.toString();
-                            final showId = alert['show_id']?.toString();
-                            bool success = false;
-                            if (roomId != null && showId != null && roomId.isNotEmpty && showId.isNotEmpty) {
-                              success = await ApiClient.resolveRoomAlerts(roomId, showId);
-                            }
-                            if (!success) {
-                              success = await ApiClient.resolveAlert(widget.alertId);
-                            }
-                            if (!mounted) return;
-                            setState(() => _isResolving = false);
-                            if (success) {
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Đã đánh dấu xử lý vi phạm thành công!'),
-                                  backgroundColor: CSAppColors.success,
-                                ),
-                              );
-                              widget.onResolved?.call();
-                              navigator.pop(true);
-                            } else {
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Không thể cập nhật, vui lòng thử lại!'),
-                                  backgroundColor: CSAppColors.danger,
-                                ),
-                              );
-                            }
-                          },
+                        : () => _submitResolution('violation_handled'),
                   ),
+                  if (isIllegal && !isForged) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: CSAppColors.success,
+                          side: const BorderSide(color: CSAppColors.success, width: 1.4),
+                          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _isResolving
+                            ? null
+                            : () => _submitResolution('ticket_verified'),
+                        icon: const Icon(Icons.verified_outlined, size: 18),
+                        label: const Text(
+                          '2. Khách có vé hợp lệ bị sót quét (Bổ sung Tập A)',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
